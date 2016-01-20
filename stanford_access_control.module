@@ -1,0 +1,332 @@
+<?php
+/**
+ * @file
+ * File description
+ *
+ * Long description
+ */
+
+
+/**
+ * Implements hook_permission().
+ */
+function stanford_access_control_permission() {
+  return array(
+    'bypass pages password protection' => array(
+      'title' => t('bypass pages password protection'),
+      'description' => t('Bypass password protection of protected pages'),
+    ),
+    'access protected page password screen' => array(
+      'title' => t('access protected page password screen'),
+      'description' => t('Access protected page password screen.'),
+    ),
+    'administer protected pages configuration' => array(
+      'title' => t('access protected pages configuration screen'),
+      'description' => t('Access protected pages configuration screen.'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function stanford_access_control_menu() {
+  $items = array();
+
+  $items['admin/config/stanford/access_control'] = array(
+    'title' => 'Protected Pages',
+    'description' => 'Configure protected pages setting.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('stanford_access_control_configure'),
+    'access arguments' => array('administer protected pages configuration'),
+    'file' => 'stanford_access_control.admin.inc',
+  );
+  $items['admin/config/stanford/access_control/list'] = array(
+    'title' => 'Protected Pages',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+  );
+  $items['admin/config/stanford/access_control/settings'] = array(
+    'title' => 'Settings',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('stanford_access_control_settings'),
+    'access arguments' => array('administer protected pages configuration'),
+    'type' => MENU_LOCAL_TASK,
+    'file' => 'stanford_access_control.admin.inc',
+  );
+
+  $items['admin/config/stanford/access_control/%/edit'] = array(
+    'title' => 'Edit Protected Pages',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('stanford_access_control_edit', 4),
+    'access arguments' => array('administer protected pages configuration'),
+    'file' => 'stanford_access_control.admin.inc',
+  );
+
+  $items['admin/config/stanford/access_control/%/delete'] = array(
+    'title' => 'Delete Protected Pages',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('stanford_access_control_delete_confirm', 4),
+    'access arguments' => array('administer protected pages configuration'),
+    'type' => MENU_CALLBACK,
+    'file' => 'stanford_access_control.admin.inc',
+  );
+
+  $items['protected-page'] = array(
+    'title' => 'Protected Page - Enter Password',
+    'title callback' => 'stanford_access_control_get_title',
+    'description' => t('Here you can enter the password for protected pages'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('stanford_access_control_enter_password'),
+    'access callback' => 'stanford_access_control_access_callback',
+    'type' => MENU_CALLBACK,
+  );
+
+  return $items;
+}
+
+/**
+ * Callback function to determine who can enter a password.
+ */
+function stanford_access_control_access_callback() {
+  global $user;
+
+  if ($user->uid == 1) {
+    return TRUE;
+  }
+
+  if (!user_access('access protected page password screen')) {
+    return FALSE;
+  }
+
+  // if (empty($_GET['protected_page']) || !is_numeric($_GET['protected_page'])) {
+  //   return FALSE;
+  // }
+
+  return TRUE;
+}
+
+/**
+ * Implements hook_init().
+ */
+function stanford_access_control_init() {
+
+  if (user_access('bypass pages password protection')) {
+    return;
+  }
+
+  $current_path = drupal_strtolower(drupal_get_path_alias($_GET['q']));
+  $normal_path = drupal_get_normal_path($current_path);
+  $pid = stanford_access_control_is_page_locked($current_path, $normal_path);
+
+  if ($pid) {
+    $query = drupal_get_destination();
+
+    if (!empty($_SERVER['HTTP_REFERER'])) {
+      $query['back'] = urlencode($current_path);
+    }
+
+    $query['protected_page'] = $pid;
+    drupal_goto('protected-page', array('query' => $query));
+  }
+  else {
+
+    $page_node = menu_get_object();
+
+    if (isset($page_node->nid) && is_numeric($page_node->nid)) {
+      $path_to_node = 'node/' . $page_node->nid;
+      $current_path = drupal_strtolower(drupal_get_path_alias($path_to_node));
+      $normal_path = drupal_get_normal_path($current_path);
+      $pid = stanford_access_control_is_page_locked($current_path, $normal_path);
+
+      if ($pid) {
+        $query = drupal_get_destination();
+
+        if (!empty($_SERVER['HTTP_REFERER'])) {
+          $query['back'] = urlencode($current_path);
+        }
+
+        $query['protected_page'] = $pid;
+        drupal_goto('protected-page', array('query' => $query));
+      }
+    }
+  }
+
+}
+
+/**
+ * Helper function to check whether the path is protected or not.
+ */
+function stanford_access_control_is_page_locked($current_path, $normal_path) {
+
+  // Get saved options from DB.
+  $options = stanford_access_control_get_config_array();
+  $pid = 0;
+
+  // If no options then nothing to do.
+  if (!$options) {
+    return FALSE;
+  }
+
+  // Loop through the options and try to match the paths.
+  foreach ($options as $obj) {
+    $m1 = drupal_match_path($current_path, $obj->path);
+    $m2 = drupal_match_path($normal_path, $obj->path);
+
+    if ($m1 || $m2) {
+      $pid = $obj->pid;
+      break;
+    }
+  }
+
+  // If no pid found return false.
+  if (!$pid) {
+    return FALSE;
+  }
+
+  if (isset($_SESSION['_stanford_access_control']['passwords'][$pid]['expire_time'])) {
+    if (time() >= $_SESSION['_stanford_access_control']['passwords'][$pid]['expire_time']) {
+      unset($_SESSION['_stanford_access_control']['passwords'][$pid]['request_time']);
+      unset($_SESSION['_stanford_access_control']['passwords'][$pid]['expire_time']);
+    }
+  }
+
+  if (isset($_SESSION['_stanford_access_control']['passwords'][$pid]['request_time'])) {
+    return FALSE;
+  }
+
+  return $pid;
+}
+
+/**
+ * Gets and returns a tidy array of options from the database.
+ *
+ * @param int $pid
+ *   The id of the row to return.
+ *
+ * @return array
+ *     An array of options.
+ */
+function stanford_access_control_get_config_array($pid = NULL) {
+
+  // Static cache this.
+  $options = &drupal_static(__FUNCTION__);
+
+  // If the cache is hot and the caller wants all of them.
+  if (is_array($options) && count($options) && is_null($pid)) {
+    return $options;
+  }
+
+  // If the cache is hot and the caller wants just one row.
+  if (is_array($options) && !is_null($pid) && isset($options[$pid])) {
+    return $options[$pid];
+  }
+
+  // No cache. Start from scratch.
+  $results = db_select("stanford_access_control", "sac")
+    ->fields("sac")
+    ->execute()
+    ->fetchAllAssoc("pid");
+
+  // We got some.
+  if (count($results) && is_null($pid)) {
+    return $results;
+  }
+
+  // For the specific row.
+  if (count($results) && isset($results[$pid])) {
+    return $results[$pid];
+  }
+
+  return FALSE;
+}
+
+/**
+ * Title Callback for enter password page.
+ */
+function stanford_access_control_get_title() {
+  return check_plain(variable_get('stanford_access_control_title', t('Protected Page -- Enter password')));
+}
+
+
+
+// Password Page
+// --------------------------------------------------------------------
+
+/**
+ * Callback function for enter password page.
+ */
+function stanford_access_control_enter_password($form, &$form_state) {
+
+  if (!isset($_GET['destination']) || empty($_GET['stanford_access_control']) || !is_numeric($_GET['stanford_access_control'])) {
+    watchdog('stanford_access_control', 'Illegal call to /protected-page', array(), WATCHDOG_WARNING);
+    drupal_access_denied();
+    exit();
+  }
+
+  $pid = db_select('stanford_access_control')
+    ->fields('stanford_access_control', array('pid'))
+    ->condition('pid', $_GET['stanford_access_control'])
+    ->range(0, 1)
+    ->execute()
+    ->fetchField();
+
+  if (!$pid) {
+    watchdog('stanford_access_control', 'Invalid pid (@pid) used with /protected-page', array('@pid' => $_GET['stanford_access_control']), WATCHDOG_WARNING);
+    drupal_access_denied();
+    exit();
+  }
+
+  $form['stanford_access_control_enter_password'] = array(
+    '#type' => 'fieldset',
+    '#description' => variable_get('stanford_access_control_description', t('The page you are trying to view is password protected. Please enter the password below to proceed.')),
+    '#collapsible' => FALSE,
+  );
+
+  $form['stanford_access_control_enter_password']['password'] = array(
+    '#type' => 'password',
+    '#title' => variable_get('stanford_access_control_password_label', t('Enter Password')),
+    '#size' => 20,
+    '#required' => TRUE,
+  );
+
+  $form['stanford_access_control_pid'] = array(
+    '#type' => 'hidden',
+    '#value' => $_GET['stanford_access_control'],
+  );
+
+  $form['stanford_access_control_enter_password']['submit'] = array(
+    '#type' => 'submit',
+    '#value' => variable_get('stanford_access_control_submit_button_text', t('Authenticate')),
+  );
+
+  return $form;
+}
+
+/**
+ * Implements hook_validate().
+ */
+function stanford_access_control_enter_password_validate($form, &$form_state) {
+
+  $password = sha1(trim(check_plain($form_state['values']['password'])));
+  $global_password = variable_get('stanford_access_control_global_password', '');
+
+  if ($global_password != $password) {
+    form_set_error('password', variable_get('stanford_access_control_incorrect_password_msg', t('Incorrect password!')));
+  }
+
+}
+
+/**
+ * Implements hook_submit().
+ */
+function stanford_access_control_enter_password_submit($form, &$form_state) {
+
+  $_SESSION['_stanford_access_control']['passwords'][$form_state['values']['stanford_access_control_pid']]['request_time'] = REQUEST_TIME;
+
+  // Give them 6 minutes of fun then take away their toys.
+  $session_expire_time = variable_get('stanford_access_control_session_expire_time', 360);
+  if ($session_expire_time) {
+    $_SESSION['_stanford_access_control']['passwords'][$form_state['values']['stanford_access_control_pid']]['expire_time'] = strtotime("+{$session_expire_time} minutes");
+  }
+
+}

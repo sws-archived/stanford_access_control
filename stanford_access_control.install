@@ -1,0 +1,69 @@
+<?php
+
+/**
+ * @file
+ * Protected Pages install file.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function stanford_access_control_schema() {
+  $schema['stanford_access_control'] = array(
+    'fields' => array(
+      'pid' => array(
+        'description' => 'The primary key always unique.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'enabled' => array(
+        'description' => 'Enable or disable a path protection.',
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => TRUE,
+        'default' => 1,
+      ),
+      'password' => array(
+        'type' => 'varchar',
+        'description' => 'The password of the protected page.',
+        'length' => '128',
+        'not null' => TRUE,
+      ),
+      'path' => array(
+        'type' => 'varchar',
+        'description' => 'The path of the protected page.',
+        'length' => '255',
+        'not null' => TRUE,
+      ),
+    ),
+    'indexes' => array(
+      'path' => array('path'),
+    ),
+    'primary key' => array('pid'),
+  );
+  return $schema;
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function stanford_access_control_uninstall() {
+  variable_del('stanford_access_control_user_global_password');
+  variable_del('stanford_access_control_session_expire_time');
+  variable_del('stanford_access_control_title');
+  variable_del('stanford_access_control_description');
+  variable_del('stanford_access_control_password_label');
+  variable_del('stanford_access_control_submit_button_text');
+  variable_del('stanford_access_control_global_password');
+  variable_del('stanford_access_control_incorrect_password_msg');
+}
+
+/**
+ * Implements hook_enable().
+ */
+function stanford_access_control_enable() {
+  drupal_set_message(t('The Stanford Access Control module has been successfully enabled.
+    Visit the <a href="@permissions">permissions</a>, and set the permissions.',
+    array('@permissions' => url('admin/people/permissions', array('fragment' => 'module-stanford_access_control')))));
+}

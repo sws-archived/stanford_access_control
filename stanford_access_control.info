@@ -1,0 +1,9 @@
+name = Stanford Accesss Control
+description = This module provides an interface for protecting access to parts of the website.
+core = 7.x
+package = Stanford
+version = 7.x-1.0-dev
+project = stanford_access_control
+dependencies[] = menu
+project status url = https://github.com/SU-SWS/stanford_access_control
+configure = admin/config/stanford/access_control/settings
