@@ -20,9 +20,9 @@ function stanford_access_control_permission() {
       'title' => t('access protected page password screen'),
       'description' => t('Access protected page password screen.'),
     ),
-    'administer protected pages configuration' => array(
-      'title' => t('access protected pages configuration screen'),
-      'description' => t('Access protected pages configuration screen.'),
+    'administer stanford access control' => array(
+      'title' => t('Administer Stanford Access Control module.'),
+      'description' => t('Access configuration screen.'),
     ),
   );
 }
@@ -34,22 +34,24 @@ function stanford_access_control_menu() {
   $items = array();
 
   $items['admin/config/stanford/access_control'] = array(
-    'title' => 'Protected Pages',
+    'title' => 'Stanford Access Control',
     'description' => 'Configure protected pages setting.',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('stanford_access_control_configure'),
-    'access arguments' => array('administer protected pages configuration'),
+    'access arguments' => array('administer stanford access control'),
     'file' => 'stanford_access_control.admin.inc',
   );
+
   $items['admin/config/stanford/access_control/list'] = array(
     'title' => 'Protected Pages',
     'type' => MENU_DEFAULT_LOCAL_TASK,
   );
+
   $items['admin/config/stanford/access_control/settings'] = array(
     'title' => 'Settings',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('stanford_access_control_settings'),
-    'access arguments' => array('administer protected pages configuration'),
+    'access arguments' => array('administer stanford access control'),
     'type' => MENU_LOCAL_TASK,
     'file' => 'stanford_access_control.admin.inc',
   );
@@ -58,7 +60,7 @@ function stanford_access_control_menu() {
     'title' => 'Edit Protected Pages',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('stanford_access_control_edit', 4),
-    'access arguments' => array('administer protected pages configuration'),
+    'access arguments' => array('administer stanford access control'),
     'file' => 'stanford_access_control.admin.inc',
   );
 
@@ -66,7 +68,7 @@ function stanford_access_control_menu() {
     'title' => 'Delete Protected Pages',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('stanford_access_control_delete_confirm', 4),
-    'access arguments' => array('administer protected pages configuration'),
+    'access arguments' => array('administer stanford access control'),
     'type' => MENU_CALLBACK,
     'file' => 'stanford_access_control.admin.inc',
   );
@@ -110,57 +112,199 @@ function stanford_access_control_access_callback() {
  */
 function stanford_access_control_init() {
 
+  // Always let go if the user has the bypass.
   if (user_access('bypass pages password protection')) {
     return;
   }
 
+  // If the page is a node let the node_access hook handle things.
+  $node = menu_get_object();
+  if ($node) {
+    return;
+  }
+
+  // For all other things including other entity types.
   $current_path = drupal_strtolower(drupal_get_path_alias($_GET['q']));
   $normal_path = drupal_get_normal_path($current_path);
-  $pid = stanford_access_control_is_page_locked($current_path, $normal_path);
 
-  if ($pid) {
-    $query = drupal_get_destination();
 
-    if (!empty($_SERVER['HTTP_REFERER'])) {
-      $query['back'] = urlencode($current_path);
-    }
+  // $current_path = drupal_strtolower(drupal_get_path_alias($_GET['q']));
+  // $normal_path = drupal_get_normal_path($current_path);
+  // $pid = stanford_access_control_is_page_locked($current_path, $normal_path);
 
-    $query['protected_page'] = $pid;
-    drupal_goto('protected-page', array('query' => $query));
+  // if ($pid) {
+  //   $query = drupal_get_destination();
+
+  //   if (!empty($_SERVER['HTTP_REFERER'])) {
+  //     $query['back'] = urlencode($current_path);
+  //   }
+
+  //   $query['protected_page'] = $pid;
+  //   drupal_goto('protected-page', array('query' => $query));
+  // }
+  // else {
+
+  //   $page_node = menu_get_object();
+
+  //   if (isset($page_node->nid) && is_numeric($page_node->nid)) {
+  //     $path_to_node = 'node/' . $page_node->nid;
+  //     $current_path = drupal_strtolower(drupal_get_path_alias($path_to_node));
+  //     $normal_path = drupal_get_normal_path($current_path);
+  //     $pid = stanford_access_control_is_page_locked($current_path, $normal_path);
+
+  //     if ($pid) {
+  //       $query = drupal_get_destination();
+
+  //       if (!empty($_SERVER['HTTP_REFERER'])) {
+  //         $query['back'] = urlencode($current_path);
+  //       }
+
+  //       $query['protected_page'] = $pid;
+  //       drupal_goto('protected-page', array('query' => $query));
+  //     }
+  //   }
+  // }
+
+}
+
+/**
+ * Implements hook_node_access().
+ */
+function stanford_access_control_node_access($node, $op, $account) {
+
+  // Only run on view op
+  if ($op !== "view") {
+    return NODE_ACCESS_IGNORE;
   }
-  else {
 
-    $page_node = menu_get_object();
+  // Nothing to do when the passed in param is not an object.
+  if (!is_object($node) || !isset($node->nid)) {
+    return NODE_ACCESS_IGNORE;
+  }
 
-    if (isset($page_node->nid) && is_numeric($page_node->nid)) {
-      $path_to_node = 'node/' . $page_node->nid;
-      $current_path = drupal_strtolower(drupal_get_path_alias($path_to_node));
-      $normal_path = drupal_get_normal_path($current_path);
-      $pid = stanford_access_control_is_page_locked($current_path, $normal_path);
+  // Always let go if the user has the bypass.
+  if (user_access('bypass pages password protection')) {
+    return NODE_ACCESS_IGNORE;
+  }
 
-      if ($pid) {
-        $query = drupal_get_destination();
+  // Store both path options.
+  $path = "node/" . $node->nid;
+  $alias = "";
 
-        if (!empty($_SERVER['HTTP_REFERER'])) {
-          $query['back'] = urlencode($current_path);
-        }
+  if (module_exists("path")) {
+    $alias = drupal_get_path_alias($path);
+  }
 
-        $query['protected_page'] = $pid;
-        drupal_goto('protected-page', array('query' => $query));
-      }
-    }
+  $pid = stanford_access_control_is_page_locked($alias, $path);
+
+  // If we get a PID then we have a valid entry against this path.
+  if ($pid) {
+    return NODE_ACCESS_DENY;
+  }
+
+  // Returning nothing from this function would have the same effect.
+  return NODE_ACCESS_IGNORE;
+}
+
+/**
+ * Implements hook_bean_access().
+ *
+ * Access callback for beans
+ *
+ * @param $bean
+ *  Tthe fully loaded bean object
+ * @param $bean
+ *  The access type of view, edit, delete, create
+ * @param $account
+ *  The user account
+ *
+ * @return boolean
+ *  True if access is allowed, FALSE if not.
+ */
+function stanford_access_control_bean_access($bean, $op, $account) {
+  return TRUE;
+}
+
+/**
+ * Hide menu links if user does not have access to them.
+ * @return [type] [description]
+ */
+function stanford_access_control_translated_menu_link_alter(&$link, $map) {
+
+  // We are not here to grant.
+  if (!$link["access"] || user_access('bypass pages password protection')) {
+    return;
+  }
+
+  // Check if user has access to this path.
+  $pid = stanford_access_control_is_page_locked(drupal_get_path_alias($link["link_path"]), drupal_get_normal_path($link["link_path"]));
+
+  // If a rule matched then lets stop.
+  if ($pid) {
+    $link["access"] = FALSE;
   }
 
 }
 
 /**
+ * [menu_block_tree_alter description]
+ * @param  [type] $tree [description]
+ * @return [type]       [description]
+ */
+function stanford_access_control_menu_block_tree_alter(&$tree) {
+  // Menu block seems to miss a vital call to the access checks.
+  // Lets do that.
+  foreach ($tree as $k => $item) {
+    stanford_access_control_menu_block_tree_alter_do_access_check($item["link"]);
+    if (isset($item["below"]) && !empty($item["below"])) {
+      $item["below"] = stanford_access_control_menu_block_tree_alter($item["below"]);
+    }
+    $tree[$k] = $item;
+  }
+  return $tree;
+}
+
+/**
+ * @param $item
+ */
+function stanford_access_control_menu_block_tree_alter_do_access_check(&$item) {
+  if (isset($item['access_callback'])) {
+    $args = unserialize($item["access_arguments"]);
+    if ($item["access_callback"] == "node_access") {
+      $args[1] = node_load(str_replace("node/", "", $item["link_path"]));
+    }
+    $item["access"] = call_user_func_array($item["access_callback"], $args);
+  }
+}
+
+
+/**
+ * Implements hook_node_access_records_alter().
+ */
+function stanford_access_control_node_access_records($node) {
+  $grants = array();
+
+  return $grants;
+}
+
+
+/**
  * Helper function to check whether the path is protected or not.
+ *
+ * @param string $current_path
+ *   The aliased path of the current page.
+ * @param string $normal_path
+ *   The menu router path for the current page.
+ *
+ * @return mixed
+ *   FALSE if the page is UNLOCKED.
+ *   The $pid of the protected path entry if locked.
  */
 function stanford_access_control_is_page_locked($current_path, $normal_path) {
 
   // Get saved options from DB.
   $options = stanford_access_control_get_config_array();
-  $pid = 0;
+  $pid = FALSE;
 
   // If no options then nothing to do.
   if (!$options) {
@@ -169,6 +313,12 @@ function stanford_access_control_is_page_locked($current_path, $normal_path) {
 
   // Loop through the options and try to match the paths.
   foreach ($options as $obj) {
+
+    // Only for enabled types.
+    if (!$obj->enabled) {
+      continue;
+    }
+
     $m1 = drupal_match_path($current_path, $obj->path);
     $m2 = drupal_match_path($normal_path, $obj->path);
 
@@ -176,21 +326,11 @@ function stanford_access_control_is_page_locked($current_path, $normal_path) {
       $pid = $obj->pid;
       break;
     }
+
   }
 
   // If no pid found return false.
   if (!$pid) {
-    return FALSE;
-  }
-
-  if (isset($_SESSION['_stanford_access_control']['passwords'][$pid]['expire_time'])) {
-    if (time() >= $_SESSION['_stanford_access_control']['passwords'][$pid]['expire_time']) {
-      unset($_SESSION['_stanford_access_control']['passwords'][$pid]['request_time']);
-      unset($_SESSION['_stanford_access_control']['passwords'][$pid]['expire_time']);
-    }
-  }
-
-  if (isset($_SESSION['_stanford_access_control']['passwords'][$pid]['request_time'])) {
     return FALSE;
   }
 
@@ -240,17 +380,16 @@ function stanford_access_control_get_config_array($pid = NULL) {
   return FALSE;
 }
 
+
+// Password Page
+// --------------------------------------------------------------------
+
 /**
  * Title Callback for enter password page.
  */
 function stanford_access_control_get_title() {
   return check_plain(variable_get('stanford_access_control_title', t('Protected Page -- Enter password')));
 }
-
-
-
-// Password Page
-// --------------------------------------------------------------------
 
 /**
  * Callback function for enter password page.
