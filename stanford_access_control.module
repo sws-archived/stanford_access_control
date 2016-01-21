@@ -226,14 +226,31 @@ function stanford_access_control_bean_access($bean, $op, $account) {
 }
 
 /**
+ * Implements hook_menu_alter().
+ */
+function stanford_access_control_menu_alter(&$items) {
+
+  // Allow everything to be altered!!!!
+  foreach ($items as &$item) {
+    if ($item["access callback"] === "views_access") {
+      $item["options"]['alter'] = TRUE;
+      $item["_visible"] = TRUE;
+    }
+  }
+
+}
+
+hook_menu_link_alter()
+
+/**
  * Hide menu links if user does not have access to them.
  * @return [type] [description]
  */
 function stanford_access_control_translated_menu_link_alter(&$link, $map) {
 
-  // We are not here to grant.
-  if (!$link["access"] || user_access('bypass pages password protection')) {
-    return;
+  // We are not here to grant. Only taketh awayeth.
+  if ($link["access"] === FALSE || user_access('bypass pages password protection')) {
+    return FALSE;
   }
 
   // Check if user has access to this path.
@@ -255,7 +272,7 @@ function stanford_access_control_menu_block_tree_alter(&$tree) {
   // Menu block seems to miss a vital call to the access checks.
   // Lets do that.
   foreach ($tree as $k => $item) {
-    stanford_access_control_menu_block_tree_alter_do_access_check($item["link"]);
+    $item["link"]= stanford_access_control_menu_block_tree_alter_do_access_check($item["link"]);
     if (isset($item["below"]) && !empty($item["below"])) {
       $item["below"] = stanford_access_control_menu_block_tree_alter($item["below"]);
     }
@@ -267,26 +284,67 @@ function stanford_access_control_menu_block_tree_alter(&$tree) {
 /**
  * @param $item
  */
-function stanford_access_control_menu_block_tree_alter_do_access_check(&$item) {
-  if (isset($item['access_callback'])) {
-    $args = unserialize($item["access_arguments"]);
-    if ($item["access_callback"] == "node_access") {
-      $args[1] = node_load(str_replace("node/", "", $item["link_path"]));
-    }
-    $item["access"] = call_user_func_array($item["access_callback"], $args);
+function stanford_access_control_menu_block_tree_alter_do_access_check($item) {
+
+  $path = drupal_get_normal_path($item["link_path"]);
+  $alias = "";
+  if (module_exists("path")) {
+    $alias = drupal_get_path_alias($path);
   }
+
+  $pid = stanford_access_control_is_page_locked($alias, $path);
+
+  if ($pid && !user_access('bypass pages password protection')) {
+    $item["access"] = FALSE;
+  }
+
+  return $item;
 }
 
 
 /**
- * Implements hook_node_access_records_alter().
+ * Implements hook_node_grants().
  */
-function stanford_access_control_node_access_records($node) {
+function stanford_access_control_node_grants($account, $op) {
   $grants = array();
-
+  if ($op == "view" && user_access("access protected page password screen")) {
+    $grants["stanford_access_control"] = array(1);
+  }
   return $grants;
 }
 
+/**
+ * Implements hook_node_access_records().
+ */
+function stanford_access_control_node_access_records($node) {
+
+  $grants = array();
+  $path = "node/" . $node->nid;
+  $alias = "";
+  $record = array(
+    'nid' => $node->nid,
+    'gid' => 0,
+    'realm' => 'all',
+    'grant_view' => 1,
+    'grant_update' => 0,
+    'grant_delete' => 0,
+  );
+
+  if (module_exists("path")) {
+    $alias = drupal_get_path_alias($path);
+  }
+
+  // If in the locked paths. Add a grant.
+  $pid = stanford_access_control_is_page_locked($alias, $path);
+
+  if ($pid) {
+    $record['gid'] = 1;
+    $record['realm'] = "stanford_access_control";
+  }
+
+  $grants[] = $record;
+  return $grants;
+}
 
 /**
  * Helper function to check whether the path is protected or not.

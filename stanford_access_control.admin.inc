@@ -176,6 +176,9 @@ function stanford_access_control_configure_submit_callback($form, &$form_state) 
     $form['rules_list']['path']['#value'] = '';
   }
 
+  // Must rebuild node_access table...
+  node_access_rebuild();
+
   return $form['rules_list'];
 }
 
