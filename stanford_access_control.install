@@ -63,7 +63,21 @@ function stanford_access_control_uninstall() {
  * Implements hook_enable().
  */
 function stanford_access_control_enable() {
-  drupal_set_message(t('The Stanford Access Control module has been successfully enabled.
-    Visit the <a href="@permissions">permissions</a>, and set the permissions.',
-    array('@permissions' => url('admin/people/permissions', array('fragment' => 'module-stanford_access_control')))));
+
+  drupal_set_message(
+    t('The Stanford Access Control module has been successfully enabled. Visit the <a href="@permissions">permissions</a>, and set the permissions.',
+      array(
+        '@permissions' => url('admin/people/permissions', array('fragment' => 'module-stanford_access_control')))
+      )
+  );
+
+  // Make this heavy so its alters come last.
+  db_update("system")
+    ->fields(
+      array(
+        "weight" => 100,
+      )
+    )
+    ->condition("name", "stanford_access_control")
+    ->execute();
 }

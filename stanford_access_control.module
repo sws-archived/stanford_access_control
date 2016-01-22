@@ -33,7 +33,7 @@ function stanford_access_control_permission() {
 function stanford_access_control_menu() {
   $items = array();
 
-  $items['admin/config/stanford/access_control'] = array(
+  $items['admin/config/stanford/access-control'] = array(
     'title' => 'Stanford Access Control',
     'description' => 'Configure protected pages setting.',
     'page callback' => 'drupal_get_form',
@@ -42,12 +42,12 @@ function stanford_access_control_menu() {
     'file' => 'stanford_access_control.admin.inc',
   );
 
-  $items['admin/config/stanford/access_control/list'] = array(
+  $items['admin/config/stanford/access-control/list'] = array(
     'title' => 'Protected Pages',
     'type' => MENU_DEFAULT_LOCAL_TASK,
   );
 
-  $items['admin/config/stanford/access_control/settings'] = array(
+  $items['admin/config/stanford/access-control/settings'] = array(
     'title' => 'Settings',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('stanford_access_control_settings'),
@@ -56,7 +56,7 @@ function stanford_access_control_menu() {
     'file' => 'stanford_access_control.admin.inc',
   );
 
-  $items['admin/config/stanford/access_control/%/edit'] = array(
+  $items['admin/config/stanford/access-control/%/edit'] = array(
     'title' => 'Edit Protected Pages',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('stanford_access_control_edit', 4),
@@ -64,7 +64,7 @@ function stanford_access_control_menu() {
     'file' => 'stanford_access_control.admin.inc',
   );
 
-  $items['admin/config/stanford/access_control/%/delete'] = array(
+  $items['admin/config/stanford/access-control/%/delete'] = array(
     'title' => 'Delete Protected Pages',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('stanford_access_control_delete_confirm', 4),
@@ -126,44 +126,40 @@ function stanford_access_control_init() {
   // For all other things including other entity types.
   $current_path = drupal_strtolower(drupal_get_path_alias($_GET['q']));
   $normal_path = drupal_get_normal_path($current_path);
+  $pid = stanford_access_control_is_page_locked($current_path, $normal_path);
 
+  if ($pid) {
+    $query = drupal_get_destination();
 
-  // $current_path = drupal_strtolower(drupal_get_path_alias($_GET['q']));
-  // $normal_path = drupal_get_normal_path($current_path);
-  // $pid = stanford_access_control_is_page_locked($current_path, $normal_path);
+    if (!empty($_SERVER['HTTP_REFERER'])) {
+      $query['back'] = urlencode($current_path);
+    }
 
-  // if ($pid) {
-  //   $query = drupal_get_destination();
+    $query['protected_page'] = $pid;
+    drupal_goto('protected-page', array('query' => $query));
+  }
+  else {
 
-  //   if (!empty($_SERVER['HTTP_REFERER'])) {
-  //     $query['back'] = urlencode($current_path);
-  //   }
+    $page_node = menu_get_object();
 
-  //   $query['protected_page'] = $pid;
-  //   drupal_goto('protected-page', array('query' => $query));
-  // }
-  // else {
+    if (isset($page_node->nid) && is_numeric($page_node->nid)) {
+      $path_to_node = 'node/' . $page_node->nid;
+      $current_path = drupal_strtolower(drupal_get_path_alias($path_to_node));
+      $normal_path = drupal_get_normal_path($current_path);
+      $pid = stanford_access_control_is_page_locked($current_path, $normal_path);
 
-  //   $page_node = menu_get_object();
+      if ($pid) {
+        $query = drupal_get_destination();
 
-  //   if (isset($page_node->nid) && is_numeric($page_node->nid)) {
-  //     $path_to_node = 'node/' . $page_node->nid;
-  //     $current_path = drupal_strtolower(drupal_get_path_alias($path_to_node));
-  //     $normal_path = drupal_get_normal_path($current_path);
-  //     $pid = stanford_access_control_is_page_locked($current_path, $normal_path);
+        if (!empty($_SERVER['HTTP_REFERER'])) {
+          $query['back'] = urlencode($current_path);
+        }
 
-  //     if ($pid) {
-  //       $query = drupal_get_destination();
-
-  //       if (!empty($_SERVER['HTTP_REFERER'])) {
-  //         $query['back'] = urlencode($current_path);
-  //       }
-
-  //       $query['protected_page'] = $pid;
-  //       drupal_goto('protected-page', array('query' => $query));
-  //     }
-  //   }
-  // }
+        $query['protected_page'] = $pid;
+        drupal_goto('protected-page', array('query' => $query));
+      }
+    }
+  }
 
 }
 
@@ -229,18 +225,23 @@ function stanford_access_control_bean_access($bean, $op, $account) {
  * Implements hook_menu_alter().
  */
 function stanford_access_control_menu_alter(&$items) {
-
   // Allow everything to be altered!!!!
   foreach ($items as &$item) {
-    if ($item["access callback"] === "views_access") {
+    if (isset($item["access callback"]) && $item["access callback"] === "views_access") {
       $item["options"]['alter'] = TRUE;
-      $item["_visible"] = TRUE;
     }
   }
-
 }
 
-hook_menu_link_alter()
+/**
+ * Implements hook_menu_link_alter().
+ */
+function stanford_access_control_menu_link_alter(&$link) {
+  // Allow everything to be altered!!!!
+  if (isset($item["access callback"]) && $item["access callback"] === "views_access") {
+    $item["options"]['alter'] = TRUE;
+  }
+}
 
 /**
  * Hide menu links if user does not have access to them.
