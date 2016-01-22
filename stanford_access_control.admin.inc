@@ -290,6 +290,9 @@ function stanford_access_control_edit_submit($form, &$form_state) {
 
   drupal_write_record("stanford_access_control", $data, $keys);
 
+  // Must rebuild node_access table...
+  node_access_rebuild();
+
   drupal_set_message('The protected page settings has been successfully saved.');
   $form_state['redirect'] = 'admin/config/stanford/access-control';
 

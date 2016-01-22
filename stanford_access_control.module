@@ -226,8 +226,12 @@ function stanford_access_control_bean_access($bean, $op, $account) {
  */
 function stanford_access_control_menu_alter(&$items) {
   // Allow everything to be altered!!!!
-  foreach ($items as &$item) {
+  foreach ($items as $path => &$item) {
     if (isset($item["access callback"]) && $item["access callback"] === "views_access") {
+      $item["options"]['alter'] = TRUE;
+    }
+    // Why both? Ask the core guys. I swear they put these things in here to keep me employed.
+    if (isset($item["access_callback"]) && $item["access_callback"] === "views_access") {
       $item["options"]['alter'] = TRUE;
     }
   }
@@ -236,9 +240,13 @@ function stanford_access_control_menu_alter(&$items) {
 /**
  * Implements hook_menu_link_alter().
  */
-function stanford_access_control_menu_link_alter(&$link) {
+function stanford_access_control_menu_link_alter(&$item) {
   // Allow everything to be altered!!!!
   if (isset($item["access callback"]) && $item["access callback"] === "views_access") {
+    $item["options"]['alter'] = TRUE;
+  }
+  // Why both? Ask the core guys. I swear they put these things in here to keep me employed.
+  if (isset($item["access_callback"]) && $item["access_callback"] === "views_access") {
     $item["options"]['alter'] = TRUE;
   }
 }
