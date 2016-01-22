@@ -91,8 +91,8 @@ function stanford_access_control_get_pages_list() {
         $count,
         $data->path,
         ($data->enabled) ? t("Enabled") : t("Disabled"),
-        l(t('Edit'), "admin/config/stanford/access_control/" . $data->pid . "/edit"),
-        l(t('Delete'), 'admin/config/stanford/access_control/' . $data->pid . "/delete"),
+        l(t('Edit'), "admin/config/stanford/access-control/" . $data->pid . "/edit"),
+        l(t('Delete'), 'admin/config/stanford/access-control/' . $data->pid . "/delete"),
       ),
     );
     $count++;
@@ -291,7 +291,7 @@ function stanford_access_control_edit_submit($form, &$form_state) {
   drupal_write_record("stanford_access_control", $data, $keys);
 
   drupal_set_message('The protected page settings has been successfully saved.');
-  $form_state['redirect'] = 'admin/config/stanford/access_control';
+  $form_state['redirect'] = 'admin/config/stanford/access-control';
 
 }
 
@@ -317,7 +317,7 @@ function stanford_access_control_delete_confirm($form, &$form_state, $pid) {
   );
 
   $message = t('Are you sure you want to delete <b>"%path"</b> from protected pages list?', array('%path' => $path));
-  $cancel = 'admin/config/stanford/access_control';
+  $cancel = 'admin/config/stanford/access-control';
   $description = t('This action cannot be undone.');
 
   return confirm_form($form, $message, $cancel, $description, t('Delete'), t('Cancel'));
@@ -341,11 +341,14 @@ function stanford_access_control_delete_confirm_submit($form, &$form_state) {
     ->condition('pid', $pid)
     ->execute();
 
+  // Must rebuild node_access table...
+  node_access_rebuild();
+
   // Let the user know stuff happened.
   drupal_set_message(t('The path has been successfully deleted from the protected pages.'));
 
   // Got to go somewhere...
-  $form_state['redirect'] = 'admin/config/stanford/access_control';
+  $form_state['redirect'] = 'admin/config/stanford/access-control';
 }
 
 /**
