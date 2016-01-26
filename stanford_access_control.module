@@ -411,6 +411,12 @@ function stanford_access_control_menu_block_tree_alter_do_access_check($item) {
  */
 function stanford_access_control_preprocess_page(&$vars) {
 
+  // Check the setting to see if this was disabled.
+  $on = variable_get("stanford_access_control_messages", TRUE);
+  if (!$on) {
+    return;
+  }
+
   $normal_path = drupal_get_normal_path(current_path());
   $pids = stanford_access_control_get_pids_by_path($normal_path);
   $message = "This page is protected by the !title protection rule and permits the following to view: @allowed";
