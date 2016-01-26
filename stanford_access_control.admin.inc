@@ -96,6 +96,53 @@ function stanford_access_control_create_new_rule_form($form, &$form_state) {
 
   stanford_access_control_get_rule_form($form, $form_state);
 
+  // Let the validate and submit hooks know this is a new form.
+  $form['is_new'] = array('#type' => 'value', '#value' => TRUE);
+
+  $form["#validate"][] = "stanford_access_control_rule_validate";
+  $form["#submit"][] = "stanford_access_control_rule_submit";
+
+  return $form;
+}
+
+/**
+ * Callback function for edit protected page form.
+ */
+function stanford_access_control_edit_rule_form($form, &$form_state, $pid) {
+
+  if (!is_numeric($pid)) {
+    drupal_set_message("PID must be numeric", "error");
+    drupal_access_denied();
+    exit;
+  }
+
+  // Get some data.
+  $protected_page = stanford_access_control_get_config_array($pid);
+
+  if (!isset($protected_page->path)) {
+    drupal_set_message("No path found for that PID", "error");
+    drupal_access_denied();
+    exit;
+  }
+
+  // Get the shared form to start.
+  stanford_access_control_get_rule_form($form, $form_state);
+
+  // Alter a few elements.
+  $form['rules_list']['path']["#default_value"] = $protected_page->path;
+  $form['rules_list']['enabled']["#default_value"] = $protected_page->enabled;
+  $form['rules_list']['admin_title']["#default_value"] = $protected_page->title;
+
+  // Add the pid.
+  $form['rules_list']['pid'] = array(
+    '#type' => 'value',
+    '#value' => $pid,
+  );
+
+  // Add the validate and submit hooks.
+  $form["#validate"][] = "stanford_access_control_rule_validate";
+  $form["#submit"][] = "stanford_access_control_rule_submit";
+
   return $form;
 }
 
@@ -125,6 +172,13 @@ function stanford_access_control_get_rule_form(&$form, &$form_state) {
     '#default_value' => 1,
   );
 
+  $form['rules_list']['admin_title'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Administrative title'),
+    '#description' => t('Please enter an administrative title. This will only be used on admin pages.'),
+    '#required' => TRUE,
+  );
+
   $form['rules_list']['path'] = array(
     '#type' => 'textfield',
     '#title' => t('Relative Path'),
@@ -144,16 +198,19 @@ function stanford_access_control_get_rule_form(&$form, &$form_state) {
     '#type' => 'submit',
     '#value' => t('Save'),
   );
-}
 
+
+}
 
 /**
  * Implements hook_validate().
  */
-function stanford_access_control_configure_validate($form, &$form_state) {
+function stanford_access_control_rule_validate($form, &$form_state) {
 
   $path = "";
-  $raw_value = $form_state['values']['path'];
+  $values = $form_state['values'];
+  $raw_value = $values['path'];
+  $normal_path = drupal_get_normal_path($raw_value);
 
   $patterns = array(
     '/(\r\n?|\n)/', // newlines
@@ -171,144 +228,149 @@ function stanford_access_control_configure_validate($form, &$form_state) {
 
   // Validate normal path.
   if (empty($path)) {
-    $form_state['normal_path'] = drupal_get_normal_path($form_state['values']['path']);
-    $path = drupal_strtolower(drupal_get_path_alias($form_state['values']['path']));
-    if (!drupal_valid_path($form_state['normal_path'])) {
+    $path = drupal_strtolower(drupal_get_path_alias($values['path']));
+    if (!drupal_valid_path($normal_path)) {
       form_set_error('path', t('Please enter a correct path!'));
     }
   }
 
   $pid = db_select('stanford_access_control')
       ->fields('stanford_access_control', array('pid'))
-      ->condition(db_or()->condition('path', $form_state['normal_path'])->condition('path', $path))
+      ->condition(db_or()->condition('path', $normal_path)->condition('path', $path))
       ->range(0, 1)
       ->execute()
       ->fetchField();
 
-  if ($pid) {
+  // If we find a match that is not ours deny it.
+  if ($pid && $pid !== $values["pid"]) {
     form_set_error('path', t('Duplicate path entry is not allowed. There is already a path or its alias exists.'));
   }
+
 }
 
 /**
  * Ajax submit callback for add protected page form.
  */
-function stanford_access_control_configure_submit_callback($form, &$form_state) {
+function stanford_access_control_rule_submit($form, &$form_state) {
+
   $errors = form_get_errors();
-
-  if (count($errors) < 1) {
-
-    $data = array(
-      'password' => sha1(trim(check_plain($form_state['values']['password']))),
-      'path' => check_plain($form_state['values']['path']),
-    );
-
-    drupal_write_record("stanford_access_control", $data);
-
-    drupal_set_message('The settings has been successfully saved.');
-    $form['rules_list']['pages_table']['#markup'] = stanford_access_control_get_pages_list();
-    $form['rules_list']['path']['#value'] = '';
+  if (count($errors) >= 1) {
+    return;
   }
 
-  // Must rebuild node_access table...
-  node_access_rebuild();
-
-  return $form['rules_list'];
-}
-
-/**
- * Callback function for edit protected page form.
- */
-function stanford_access_control_edit($form, &$form_state, $pid) {
-
-  if (!is_numeric($pid)) {
-    drupal_set_message("PID must be numeric", "error");
-    drupal_access_denied();
-    exit;
-  }
-
-  // Get some data.
-  $protected_page = stanford_access_control_get_config_array($pid);
-
-  if (!isset($protected_page->path)) {
-    drupal_set_message("No path found for that PID", "error");
-    drupal_access_denied();
-    exit;
-  }
-
-  // Get the shared form to start.
-  stanford_access_control_get_rule_form($form, $form_state);
-
-  // Alter a few elements.
-  $form['rules_list']['path']["#default_value"] = $protected_page->path;
-  $form['rules_list']['enabled']["#default_value"] = $protected_page->enabled;
-
-  // Add the pid.
-  $form['rules_list']['pid'] = array(
-    '#type' => 'hidden',
-    '#value' => $pid,
-  );
-
-  return $form;
-}
-
-/**
- * Implements hook_validate().
- */
-function stanford_access_control_edit_validate($form, &$form_state) {
-
-  $normal_path = drupal_get_normal_path($form_state['values']['path']);
-  $path = $form_state['values']['path'];
-
-  $query = db_select('stanford_access_control')
-      ->fields('stanford_access_control', array('pid'))
-      ->condition('pid', $form_state['values']['pid'], '<>')
-      ->range(0, 1);
-
-  if ($normal_path) {
-    $query->condition(
-      db_or()
-        ->condition('path', $normal_path)
-        ->condition('path', $path)
-    );
-  }
-  else {
-    $query->condition("path", $path);
-  }
-
-  $pid = $query->execute()->fetchField();
-
-  if ($pid) {
-    form_set_error('path', t('Duplicate path entry is not allowed. There is already a path or its alias exists.'));
-  }
-
-}
-
-/**
- * Implements hook_submit().
- */
-function stanford_access_control_edit_submit($form, &$form_state) {
-
-  $values = $form_state["values"];
-  $values['path'] = check_plain($form_state['values']['path']);
+  global $user;
+  $values = $form_state['values'];
+  $log_type = "update";
 
   $data = array(
-    "pid" => $values["pid"],
-    "path" => $values["path"],
-    "enabled" => $values["enabled"],
+    'path' => check_plain($values["path"]),
+    'title' => check_plain($values["admin_title"]),
+    'users' => array(), // for later when we can get this to work.
+    'roles' => $values["roles"],
+    'enabled' => $values["enabled"],
+    'editor' => $user->uid,
+    'changed' => time(),
   );
 
-  $keys = array("pid");
+  // If we are creating a new entry.
+  if (isset($values["is_new"]) && $values["is_new"]) {
 
-  drupal_write_record("stanford_access_control", $data, $keys);
+    // For the log.
+    $log_type = "create";
+
+    // Add some more information.
+    $data["owner"] = $user->uid;
+    $data["created"] = time();
+
+    // Write to the db.
+    drupal_write_record("stanford_access_control", $data);
+  }
+  // If we are updating an entry.
+  else {
+    // Must have pid as key.
+    $keys = array("pid");
+    $data["pid"] = $values["pid"];
+    drupal_write_record("stanford_access_control", $data, $keys);
+  }
+
+  // Let the user know everything is ok.
+  drupal_set_message('The settings has been successfully saved.', 'status');
+
+  // Log the change.
+  stanford_access_control_log_event($log_type, $values);
 
   // Must rebuild node_access table...
   node_access_rebuild();
 
-  drupal_set_message('The protected page settings has been successfully saved.');
+  // The go somewhere.
   $form_state['redirect'] = 'admin/config/stanford/access-control';
 
 }
+
+/**
+ * Writes a watchdog log of a change.
+ * @param  [type] $form_values [description]
+ * @return [type]              [description]
+ */
+function stanford_access_control_log_event($type, $data) {
+  $link = NULL;
+  $level = WATCHDOG_NOTICE;
+  $variables = array();
+  global $user;
+
+  switch ($type) {
+    case 'create':
+      $message = "!user created new protection: @title";
+      $variables = array(
+        '!user' => l($user->name, "user/" . $user->uid),
+        '@title' => $data["admin_title"],
+      );
+      break;
+
+    case 'update':
+      $message = "!user updated protection: @title";
+      $variables = array(
+        '!user' => l($user->name, "user/" . $user->uid),
+        '@title' => $data["admin_title"],
+      );
+      $link = l("See page", "admin/config/stanford/access-control/" . $data["pid"] . "/edit");
+      break;
+
+    case 'delete':
+      $message = "!user deleted protection: @title";
+      $variables = array(
+        '!user' => l($user->name, "user/" . $user->uid),
+        '@title' => $data["admin_title"],
+      );
+      break;
+
+    case 'disable':
+      $message = "!user disabled protection: @title";
+      $variables = array(
+        '!user' => l($user->name, "user/" . $user->uid),
+        '@title' => $data["admin_title"],
+      );
+      $link = l("See page", "admin/config/stanford/access-control/" . $data["pid"] . "/edit");
+      break;
+
+    case 'enable':
+      $message = "!user enabled protection: @title";
+      $variables = array(
+        '!user' => l($user->name, "user/" . $user->uid),
+        '@title' => $data["admin_title"],
+      );
+      $link = l("See page", "admin/config/stanford/access-control/" . $data["pid"] . "/edit");
+      break;
+  }
+
+  // Can't log no message. huyuck.
+  if (!$message) {
+    return FALSE;
+  }
+
+  watchdog("stanford_access_control", $message, $variables, $level, $link);
+}
+
 
 /**
  * Callback function for delete protected page.

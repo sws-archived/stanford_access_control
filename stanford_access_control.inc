@@ -23,6 +23,10 @@ function stanford_access_control_get_pids_by_path($normal_path, $alias = NULL, $
   $options = stanford_access_control_get_config_array();
   $pids = array();
 
+  if (module_exists("path") && is_null($alias)) {
+    $alias = drupal_get_path_alias($normal_path);
+  }
+
   // If no options then nothing to do.
   if (!$options) {
     return FALSE;
@@ -93,13 +97,24 @@ function stanford_access_control_get_config_array($pid = NULL) {
     ->execute()
     ->fetchAllAssoc("pid");
 
+  // Unserialize some of the fun data we get back.
+  if (count($results)) {
+    foreach ($results as $k => $obj) {
+      $obj->users = unserialize($obj->users);
+      $obj->roles = unserialize($obj->roles);
+      $results[$k] = $obj;
+    }
+  }
+
   // We got some.
   if (count($results) && is_null($pid)) {
+    $options = $results;
     return $results;
   }
 
   // For the specific row.
   if (count($results) && isset($results[$pid])) {
+    $options[$pid] = $results[$pid];
     return $results[$pid];
   }
 
