@@ -160,8 +160,8 @@ function stanford_access_control_node_access($node, $op, $account) {
  */
 function stanford_access_control_node_grants($account, $op) {
   $grants = array();
-  if ($op == "view" && stanford_access_control_check_user_access(NULL, $account)) {
-    $grants["stanford_access_control"] = array(1);
+  if ($op == "view") {
+    $grants["stanford_access_control"] = array($account->uid);
   }
   return $grants;
 }
@@ -183,15 +183,21 @@ function stanford_access_control_node_access_records($node) {
     'grant_delete' => 0,
   );
 
-  // If in the locked paths. Add a grant.
-  $access = stanford_access_control_check_user_access($path);
+  $users = entity_load('user');
 
-  if ($access) {
-    $record['gid'] = 1;
+  foreach ($users as $account) {
+    // If in the locked paths. Add a grant.
+    $access = stanford_access_control_check_user_access($path, $account);
+
+    if (!$access) {
+      continue;
+    }
+
+    $record['gid'] = $account->uid;
     $record['realm'] = "stanford_access_control";
+    $grants[] = $record;
   }
 
-  $grants[] = $record;
   return $grants;
 }
 
@@ -292,7 +298,7 @@ function stanford_access_control_check_user_access($path = NUll, $user = NULL) {
     }
 
     // Check if any of the roles match.
-    $intersect = array_intersect($user->roles, $roles);
+    $intersect = array_intersect($user->roles, array_values($roles));
     if ($intersect) {
       $access = TRUE;
     }
