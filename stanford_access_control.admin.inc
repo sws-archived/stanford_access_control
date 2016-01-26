@@ -13,34 +13,7 @@
  */
 function stanford_access_control_configure($form, &$form_state) {
 
-  $form['rules_list'] = array(
-    '#title' => t("Add new path."),
-    '#type' => 'fieldset',
-    '#prefix' => '<div id="rules_list">',
-    '#suffix' => '</div>',
-    '#description' => t('Please enter the relative path. When user opens this
-      url, they will asked to enter password to view this page. For example,
-      "node/5", "new-events", "subsite/*" etc.'),
-  );
-
-  $form['rules_list']['path'] = array(
-    '#type' => 'textfield',
-    '#title' => t('Relative Path'),
-    '#description' => t('Enter relative drupal path. For example, "node/5", "new-events", "subsite/*" etc.'),
-    '#required' => TRUE,
-  );
-
-  $form['rules_list']['submit'] = array(
-    '#type' => 'submit',
-    '#ajax' => array(
-      'callback' => 'stanford_access_control_configure_submit_callback',
-      'wrapper' => 'rules_list',
-      'effect' => 'fade',
-      'method' => 'replace',
-      'progress' => array('type' => 'throbber', 'message' => t('Please wait. The data is being saved.')),
-    ),
-    '#value' => t('Save'),
-  );
+  $form["rules_ops"]["create_new"]["#markup"] = "<p>" . l("+ Create new protected path", "admin/config/stanford/access-control/new", array("attributes" => array("class" => "btn"))) . "</p>";
 
   $form['rules_list']['pages_table'] = array(
     '#markup' => stanford_access_control_get_pages_list(),
@@ -60,7 +33,7 @@ function stanford_access_control_get_pages_list() {
       'data' => t('#'),
     ),
     array(
-      'data' => t('Relative Path'),
+      'data' => t('Protected Path(s)'),
     ),
     array(
       'data' => t('Enabled / Disabled'),
@@ -112,6 +85,67 @@ function stanford_access_control_get_pages_list() {
   $output .= theme('pager', array('tags' => array()));
   return $output;
 }
+
+/**
+ * [stanford_access_control_create_new_rule_form description]
+ * @param  [type] $form        [description]
+ * @param  [type] &$form_state [description]
+ * @return [type]              [description]
+ */
+function stanford_access_control_create_new_rule_form($form, &$form_state) {
+
+  stanford_access_control_get_rule_form($form, $form_state);
+
+  return $form;
+}
+
+/**
+ * Alters the form to add the rule form common elements.
+ * @param  [type] &$form       [description]
+ * @param  [type] &$form_state [description]
+ * @return [type]              [description]
+ */
+function stanford_access_control_get_rule_form(&$form, &$form_state) {
+
+  global $user;
+  $role_opts = user_roles();
+  $role_opts_keyed = array_combine($role_opts, $role_opts);
+
+  $form['rules_list'] = array(
+    '#title' => t("Protected Page Relative path and password."),
+    '#type' => 'fieldset',
+    '#prefix' => '<div id="rules_list">',
+    '#suffix' => '</div>',
+  );
+
+  $form['rules_list']['enabled'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Enable'),
+    '#description' => t('Uncheck to disable this protected path.'),
+    '#default_value' => 1,
+  );
+
+  $form['rules_list']['path'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Relative Path'),
+    '#description' => t('Please enter a relative path. This can be the path alias eg: "about-us" or the raw path eg: "node/115" as well as wildcard paths eg: academics*.'),
+    '#required' => TRUE,
+  );
+
+  $form['rules_list']['roles'] = array(
+    '#type' => 'checkboxes',
+    '#title' => 'Roles that can view',
+    '#description' => t("The roles selected here will be able to view the pages protected by this path rule"),
+    '#options' => $role_opts_keyed,
+    '#default_value' => isset($user->roles) ? $user->roles : "",
+  );
+
+  $form['rules_list']['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Save'),
+  );
+}
+
 
 /**
  * Implements hook_validate().
@@ -202,39 +236,17 @@ function stanford_access_control_edit($form, &$form_state, $pid) {
     exit;
   }
 
-  $form['rules_list'] = array(
-    '#title' => t("Edit Protected Page Relative path and password."),
-    '#type' => 'fieldset',
-    '#prefix' => '<div id="rules_list">',
-    '#suffix' => '</div>',
-    '#description' => t('Please enter the relative path and its corresponding
-    password. When user opens this url, they will assked to enter password to
-    view this page. For example, "node/5", "new-events" etc.'),
-  );
+  // Get the shared form to start.
+  stanford_access_control_get_rule_form($form, $form_state);
 
-  $form['rules_list']['path'] = array(
-    '#type' => 'textfield',
-    '#title' => t('Relative Path'),
-    '#description' => t('Enter relative drupal path. For example, "node/5", "new-events" etc.'),
-    '#required' => TRUE,
-    '#default_value' => $protected_page->path,
-  );
+  // Alter a few elements.
+  $form['rules_list']['path']["#default_value"] = $protected_page->path;
+  $form['rules_list']['enabled']["#default_value"] = $protected_page->enabled;
 
-  $form['rules_list']['enabled'] = array(
-    '#type' => 'checkbox',
-    '#title' => t('Enable'),
-    '#description' => t('Uncheck to disable this protected path.'),
-    '#default_value' => $protected_page->enabled,
-  );
-
+  // Add the pid.
   $form['rules_list']['pid'] = array(
     '#type' => 'hidden',
     '#value' => $pid,
-  );
-
-  $form['rules_list']['submit'] = array(
-    '#type' => 'submit',
-    '#value' => t('Save'),
   );
 
   return $form;
@@ -359,81 +371,11 @@ function stanford_access_control_delete_confirm_submit($form, &$form_state) {
  */
 function stanford_access_control_settings() {
 
-  $form['stanford_access_control_password_fieldset'] = array(
-    '#type' => 'fieldset',
-    '#title' => t('Stanford Access Control Password Settings'),
-    '#description' => t('Configure password related settings.'),
-    '#collapsible' => TRUE,
-    '#collapsed' => FALSE,
-  );
-
-  // Password Field.
-  $form['stanford_access_control_password_fieldset']['stanford_access_control_global_password_field'] = array(
-    '#type' => 'password_confirm',
-    '#title' => t('Password'),
-    '#description' => t('The default password for all protected pages.'),
-  );
-
-  // $form['stanford_access_control_password_fieldset']['stanford_access_control_session_expire_time'] = array(
-  //   '#type' => 'textfield',
-  //   '#title' => t('Session Expire Time'),
-  //   '#description' => t('When user enters password a session is created.
-  //     The node will be accessible until session expire. Once session expires,
-  //     user will need to enter password again. The default session expire time
-  //     is 0 (unlimited).'),
-  //   '#default_value' => variable_get('stanford_access_control_session_expire_time', 0),
-  //   '#required' => TRUE,
-  //   '#size' => 10,
-  //   '#element_validate' => array('stanford_access_control_validate_integer_positive'),
-  //   '#field_suffix' => t('in minutes'),
-  // );
-
-  $form['stanford_access_control_other_fieldset'] = array(
-    '#type' => 'fieldset',
-    '#title' => t('Protected Page Settings'),
-    '#description' => t('Configure password prompt page.'),
-    '#collapsible' => TRUE,
-    '#collapsed' => FALSE,
-  );
-
-  // Page title.
-  $form['stanford_access_control_other_fieldset']['stanford_access_control_title'] = array(
-    '#type' => 'textfield',
-    '#title' => t('Password page title'),
-    '#default_value' => variable_get('stanford_access_control_title', t('Protected Page -- Enter password')),
-    '#description' => t('Enter the title of the protected page.'),
-  );
-
-  // Description text.
-  $form['stanford_access_control_other_fieldset']['stanford_access_control_description'] = array(
-    '#type' => 'textarea',
-    '#title' => t('Password page description (inside the field set)'),
-    '#default_value' => variable_get('stanford_access_control_description', t('The page you are trying to view is password protected. Please enter the password below to proceed.')),
-    '#description' => t('Enter specific description for the protected page. This description is displayed inside the fieldset. HTML is accepted.'),
-  );
-
-  // Password field label.
-  $form['stanford_access_control_other_fieldset']['stanford_access_control_password_label'] = array(
-    '#type' => 'textfield',
-    '#title' => t('Password field label'),
-    '#default_value' => variable_get('stanford_access_control_password_label', t('Enter Password')),
-    '#description' => t('Enter the text for the password field label.'),
-  );
-
-  // Submit button text.
-  $form['stanford_access_control_other_fieldset']['stanford_access_control_submit_button_text'] = array(
-    '#type' => 'textfield',
-    '#title' => t('Submit Button Text'),
-    '#default_value' => variable_get('stanford_access_control_submit_button_text', t('Authenticate')),
-    '#description' => t('Enter the text for the submit button of enter password form.'),
-  );
-
-  // Error message text.
-  $form['stanford_access_control_other_fieldset']['stanford_access_control_incorrect_password_msg'] = array(
-    '#type' => 'textarea',
-    '#title' => t('Incorrect Password Error Text'),
-    '#default_value' => variable_get('stanford_access_control_incorrect_password_msg', t('Incorrect password!')),
-    '#description' => t('This error text will appear if someone enters wrong password in "Enter password screen".'),
+  $form["sac_messages"] = array(
+    '#type' => "checkbox",
+    '#title' => "Enable protected messages",
+    '#description' => "Check this box to show messages on pages that are protected",
+    '#default_value' => variable_get("stanford_access_control_messages", TRUE),
   );
 
   // Add a submit handler.
@@ -444,24 +386,16 @@ function stanford_access_control_settings() {
 }
 
 /**
- * Callback function to validate session expire time value.
- */
-// function stanford_access_control_validate_integer_positive($element, &$form_state) {
-//   $value = $element['#value'];
-//   if ($value !== '' && (!is_numeric($value) || intval($value) != $value || $value < 0)) {
-//     form_error($element, t('%name must be a positive integer.', array('%name' => $element['#title'])));
-//   }
-// }
-
-/**
  * Custom submit function encrypt password and deleting non-useful variable.
  */
 function stanford_access_control_settings_submit($form, &$form_state) {
 
-  $passwd = $form_state['values']['stanford_access_control_global_password_field'];
-
-  if ($passwd) {
-    variable_set('stanford_access_control_global_password', sha1($passwd));
+  $values = $form_state["values"];
+  if ($values["sac_messages"]) {
+    variable_set("stanford_access_control_messages", TRUE);
+  }
+  else {
+    variable_set("stanford_access_control_messages", FALSE);
   }
 
 }

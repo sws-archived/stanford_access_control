@@ -6,6 +6,8 @@
  * Long description
  */
 
+// Helpers.
+include_once("stanford_access_control.inc");
 
 /**
  * Implements hook_permission().
@@ -15,10 +17,6 @@ function stanford_access_control_permission() {
     'bypass pages password protection' => array(
       'title' => t('bypass pages password protection'),
       'description' => t('Bypass password protection of protected pages'),
-    ),
-    'access protected page password screen' => array(
-      'title' => t('access protected page password screen'),
-      'description' => t('Access protected page password screen.'),
     ),
     'administer stanford access control' => array(
       'title' => t('Administer Stanford Access Control module.'),
@@ -56,6 +54,15 @@ function stanford_access_control_menu() {
     'file' => 'stanford_access_control.admin.inc',
   );
 
+  $items['admin/config/stanford/access-control/new'] = array(
+    'title' => 'Create new protected path',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('stanford_access_control_create_new_rule_form'),
+    'access arguments' => array('administer stanford access control'),
+    'type' => MENU_LOCAL_TASK,
+    'file' => 'stanford_access_control.admin.inc',
+  );
+
   $items['admin/config/stanford/access-control/%/edit'] = array(
     'title' => 'Edit Protected Pages',
     'page callback' => 'drupal_get_form',
@@ -73,39 +80,12 @@ function stanford_access_control_menu() {
     'file' => 'stanford_access_control.admin.inc',
   );
 
-  $items['protected-page'] = array(
-    'title' => 'Protected Page - Enter Password',
-    'title callback' => 'stanford_access_control_get_title',
-    'description' => t('Here you can enter the password for protected pages'),
-    'page callback' => 'drupal_get_form',
-    'page arguments' => array('stanford_access_control_enter_password'),
-    'access callback' => 'stanford_access_control_access_callback',
-    'type' => MENU_CALLBACK,
-  );
-
   return $items;
 }
 
 /**
- * Callback function to determine who can enter a password.
+ * ********************** PATH ACCESS ******************************************
  */
-function stanford_access_control_access_callback() {
-  global $user;
-
-  if ($user->uid == 1) {
-    return TRUE;
-  }
-
-  if (!user_access('access protected page password screen')) {
-    return FALSE;
-  }
-
-  // if (empty($_GET['protected_page']) || !is_numeric($_GET['protected_page'])) {
-  //   return FALSE;
-  // }
-
-  return TRUE;
-}
 
 /**
  * Implements hook_init().
@@ -118,57 +98,36 @@ function stanford_access_control_init() {
   }
 
   // If the page is a node let the node_access hook handle things.
+  // TODO: Check to see if loading the node this early is an issue.
   $node = menu_get_object();
   if ($node) {
     return;
   }
 
   // For all other things including other entity types.
-  $current_path = drupal_strtolower(drupal_get_path_alias($_GET['q']));
-  $normal_path = drupal_get_normal_path($current_path);
-  $pid = stanford_access_control_is_page_locked($current_path, $normal_path);
+  $current_path = current_path();
+  $access = stanford_access_control_check_user_access($current_path);
 
-  if ($pid) {
-    $query = drupal_get_destination();
-
-    if (!empty($_SERVER['HTTP_REFERER'])) {
-      $query['back'] = urlencode($current_path);
-    }
-
-    $query['protected_page'] = $pid;
-    drupal_goto('protected-page', array('query' => $query));
-  }
-  else {
-
-    $page_node = menu_get_object();
-
-    if (isset($page_node->nid) && is_numeric($page_node->nid)) {
-      $path_to_node = 'node/' . $page_node->nid;
-      $current_path = drupal_strtolower(drupal_get_path_alias($path_to_node));
-      $normal_path = drupal_get_normal_path($current_path);
-      $pid = stanford_access_control_is_page_locked($current_path, $normal_path);
-
-      if ($pid) {
-        $query = drupal_get_destination();
-
-        if (!empty($_SERVER['HTTP_REFERER'])) {
-          $query['back'] = urlencode($current_path);
-        }
-
-        $query['protected_page'] = $pid;
-        drupal_goto('protected-page', array('query' => $query));
-      }
-    }
+  if (!$access) {
+    stanford_access_control_deny_access();
   }
 
 }
+
+/**
+ * ********************** END PATH ACCESS **************************************
+ */
+
+/**
+ * ********************** NODE ACCESS ******************************************
+ */
 
 /**
  * Implements hook_node_access().
  */
 function stanford_access_control_node_access($node, $op, $account) {
 
-  // Only run on view op
+  // Only run on view op.
   if ($op !== "view") {
     return NODE_ACCESS_IGNORE;
   }
@@ -185,22 +144,63 @@ function stanford_access_control_node_access($node, $op, $account) {
 
   // Store both path options.
   $path = "node/" . $node->nid;
-  $alias = "";
-
-  if (module_exists("path")) {
-    $alias = drupal_get_path_alias($path);
-  }
-
-  $pid = stanford_access_control_is_page_locked($alias, $path);
+  $access = stanford_access_control_check_user_access($path, $account);
 
   // If we get a PID then we have a valid entry against this path.
-  if ($pid) {
+  if (!$access) {
     return NODE_ACCESS_DENY;
   }
 
   // Returning nothing from this function would have the same effect.
   return NODE_ACCESS_IGNORE;
 }
+
+/**
+ * Implements hook_node_grants().
+ */
+function stanford_access_control_node_grants($account, $op) {
+  $grants = array();
+  if ($op == "view" && stanford_access_control_check_user_access(NULL, $account)) {
+    $grants["stanford_access_control"] = array(1);
+  }
+  return $grants;
+}
+
+/**
+ * Implements hook_node_access_records().
+ */
+function stanford_access_control_node_access_records($node) {
+
+  $grants = array();
+  $path = "node/" . $node->nid;
+  $record = array(
+    'nid' => $node->nid,
+    'gid' => 0,
+    'realm' => 'all',
+    'grant_view' => 1,
+    'grant_update' => 0,
+    'grant_delete' => 0,
+  );
+
+  // If in the locked paths. Add a grant.
+  $access = stanford_access_control_check_user_access($path);
+
+  if ($access) {
+    $record['gid'] = 1;
+    $record['realm'] = "stanford_access_control";
+  }
+
+  $grants[] = $record;
+  return $grants;
+}
+
+/**
+ * ********************** END NODE ACCESS **************************************
+ */
+
+/**
+ * ************************ BEAN ACCESS ****************************************
+ */
 
 /**
  * Implements hook_bean_access().
@@ -220,6 +220,91 @@ function stanford_access_control_node_access($node, $op, $account) {
 function stanford_access_control_bean_access($bean, $op, $account) {
   return TRUE;
 }
+
+/**
+ * *********************** END BEAN ACCESS *************************************
+ */
+
+/**
+ * Checks wether or not a user has access to a path.
+ *
+ * Checks the current user and path (if not provided) for access against all
+ * of the configured access path rules.
+ *
+ * @param string $path
+ *   The path to check.
+ * @param object $user
+ *   The user account to check on.
+ *
+ * @return boolean
+ *   True for access. False for denied.
+ */
+function stanford_access_control_check_user_access($path = NUll, $user = NULL) {
+  $access = FALSE;
+
+  // Default to current path if not passed in explicitly.
+  if (!$path) {
+    $path = current_path();
+  }
+
+  // Do the normal parsing of the path.
+  $normal_path = drupal_get_normal_path($path);
+  $alias = "";
+  if (module_exists("path")) {
+    $alias = drupal_get_path_alias($normal_path);
+  }
+
+  // If no user passed in get the current user from global.
+  if (!$user) {
+    global $user;
+  }
+
+  // If bypass access always go to true.
+  if (user_access('bypass pages password protection', $user)) {
+    return TRUE;
+  }
+
+  // Get all the pids that match the path we are on.
+  $pids = stanford_access_control_get_pids_by_path($normal_path, $alias);
+
+  // If no pids then we can assume access.
+  if (!$pids) {
+    return TRUE;
+  }
+
+  // Foreach of the options found check the users access against it.
+  foreach ($pids as $pid => $values) {
+
+    // If the rule is not enabled then skip.
+    if (!$values->enabled) {
+      continue;
+    }
+
+    // Get the allowed users and roles.
+    $roles = $values->roles;
+    $users = $values->users;
+
+    // Check if the user has specific access.
+    if (in_array($user->uid, $users)) {
+      $access = TRUE;
+      break;
+    }
+
+    // Check if any of the roles match.
+    $intersect = array_intersect($user->roles, $roles);
+    if ($intersect) {
+      $access = TRUE;
+    }
+
+  }
+
+  return $access;
+}
+
+
+/**
+ * ********************* MENU ITEMS ********************************************
+ */
 
 /**
  * Implements hook_menu_alter().
@@ -262,26 +347,23 @@ function stanford_access_control_translated_menu_link_alter(&$link, $map) {
     return FALSE;
   }
 
-  // Check if user has access to this path.
-  $pid = stanford_access_control_is_page_locked(drupal_get_path_alias($link["link_path"]), drupal_get_normal_path($link["link_path"]));
+  // Check the access.
+  $access = stanford_access_control_check_user_access($link["link_path"]);
 
-  // If a rule matched then lets stop.
-  if ($pid) {
+  if (!$access) {
     $link["access"] = FALSE;
   }
 
 }
 
 /**
- * [menu_block_tree_alter description]
- * @param  [type] $tree [description]
- * @return [type]       [description]
+ * Alter the menu block tree to hide items that the user has no access to.
  */
 function stanford_access_control_menu_block_tree_alter(&$tree) {
   // Menu block seems to miss a vital call to the access checks.
   // Lets do that.
   foreach ($tree as $k => $item) {
-    $item["link"]= stanford_access_control_menu_block_tree_alter_do_access_check($item["link"]);
+    $item["link"] = stanford_access_control_menu_block_tree_alter_do_access_check($item["link"]);
     if (isset($item["below"]) && !empty($item["below"])) {
       $item["below"] = stanford_access_control_menu_block_tree_alter($item["below"]);
     }
@@ -291,248 +373,72 @@ function stanford_access_control_menu_block_tree_alter(&$tree) {
 }
 
 /**
- * @param $item
+ * Run an access check against a menu item.
+ *
+ * This function will alter the menu item to deny access. It will never grant
+ * access to a path.
+ *
+ * @param array $item
+ *   A menu item.
+ *
+ * @return array
+ *   The modified $item that was passed in.
  */
 function stanford_access_control_menu_block_tree_alter_do_access_check($item) {
 
   $path = drupal_get_normal_path($item["link_path"]);
-  $alias = "";
-  if (module_exists("path")) {
-    $alias = drupal_get_path_alias($path);
-  }
 
-  $pid = stanford_access_control_is_page_locked($alias, $path);
+  $access = stanford_access_control_check_user_access($path);
 
-  if ($pid && !user_access('bypass pages password protection')) {
+  if (!$access) {
     $item["access"] = FALSE;
   }
 
   return $item;
 }
 
+/**
+ * ********************* END MENU ITEMS ****************************************
+ */
 
 /**
- * Implements hook_node_grants().
+ * ********************* PAGE MESSAGES *****************************************
  */
-function stanford_access_control_node_grants($account, $op) {
-  $grants = array();
-  if ($op == "view" && user_access("access protected page password screen")) {
-    $grants["stanford_access_control"] = array(1);
-  }
-  return $grants;
-}
 
 /**
- * Implements hook_node_access_records().
+ * Implements hook_preprocess_page().
  */
-function stanford_access_control_node_access_records($node) {
+function stanford_access_control_preprocess_page(&$vars) {
 
-  $grants = array();
-  $path = "node/" . $node->nid;
-  $alias = "";
-  $record = array(
-    'nid' => $node->nid,
-    'gid' => 0,
-    'realm' => 'all',
-    'grant_view' => 1,
-    'grant_update' => 0,
-    'grant_delete' => 0,
-  );
+  $normal_path = drupal_get_normal_path(current_path());
+  $pids = stanford_access_control_get_pids_by_path($normal_path);
+  $message = "This page is protected by the !title protection rule and permits the following to view: @allowed";
 
-  if (module_exists("path")) {
-    $alias = drupal_get_path_alias($path);
-  }
+  foreach ($pids as $pid => $obj) {
 
-  // If in the locked paths. Add a grant.
-  $pid = stanford_access_control_is_page_locked($alias, $path);
+    $link_to_rule = l(
+      check_plain($obj->title),
+      "admin/config/stanford/access-control/" . $pid . "/edit"
+    );
 
-  if ($pid) {
-    $record['gid'] = 1;
-    $record['realm'] = "stanford_access_control";
-  }
-
-  $grants[] = $record;
-  return $grants;
-}
-
-/**
- * Helper function to check whether the path is protected or not.
- *
- * @param string $current_path
- *   The aliased path of the current page.
- * @param string $normal_path
- *   The menu router path for the current page.
- *
- * @return mixed
- *   FALSE if the page is UNLOCKED.
- *   The $pid of the protected path entry if locked.
- */
-function stanford_access_control_is_page_locked($current_path, $normal_path) {
-
-  // Get saved options from DB.
-  $options = stanford_access_control_get_config_array();
-  $pid = FALSE;
-
-  // If no options then nothing to do.
-  if (!$options) {
-    return FALSE;
-  }
-
-  // Loop through the options and try to match the paths.
-  foreach ($options as $obj) {
-
-    // Only for enabled types.
-    if (!$obj->enabled) {
-      continue;
+    $allowed = "";
+    if (is_array($obj->roles)) {
+      $allowed = implode(", ", $obj->roles);
+    }
+    if (is_array($obj->users)) {
+      $allowed .= " " . t("and") . " " . implode(", ", $obj->users);
     }
 
-    $m1 = drupal_match_path($current_path, $obj->path);
-    $m2 = drupal_match_path($normal_path, $obj->path);
-
-    if ($m1 || $m2) {
-      $pid = $obj->pid;
-      break;
-    }
+    drupal_set_message(
+      t(
+        $message,
+        array(
+          "!title" => $link_to_rule,
+          "@allowed" => $allowed
+        )
+      ),
+      "stanford-access-control"
+    );
 
   }
-
-  // If no pid found return false.
-  if (!$pid) {
-    return FALSE;
-  }
-
-  return $pid;
-}
-
-/**
- * Gets and returns a tidy array of options from the database.
- *
- * @param int $pid
- *   The id of the row to return.
- *
- * @return array
- *     An array of options.
- */
-function stanford_access_control_get_config_array($pid = NULL) {
-
-  // Static cache this.
-  $options = &drupal_static(__FUNCTION__);
-
-  // If the cache is hot and the caller wants all of them.
-  if (is_array($options) && count($options) && is_null($pid)) {
-    return $options;
-  }
-
-  // If the cache is hot and the caller wants just one row.
-  if (is_array($options) && !is_null($pid) && isset($options[$pid])) {
-    return $options[$pid];
-  }
-
-  // No cache. Start from scratch.
-  $results = db_select("stanford_access_control", "sac")
-    ->fields("sac")
-    ->execute()
-    ->fetchAllAssoc("pid");
-
-  // We got some.
-  if (count($results) && is_null($pid)) {
-    return $results;
-  }
-
-  // For the specific row.
-  if (count($results) && isset($results[$pid])) {
-    return $results[$pid];
-  }
-
-  return FALSE;
-}
-
-
-// Password Page
-// --------------------------------------------------------------------
-
-/**
- * Title Callback for enter password page.
- */
-function stanford_access_control_get_title() {
-  return check_plain(variable_get('stanford_access_control_title', t('Protected Page -- Enter password')));
-}
-
-/**
- * Callback function for enter password page.
- */
-function stanford_access_control_enter_password($form, &$form_state) {
-
-  if (!isset($_GET['destination']) || empty($_GET['stanford_access_control']) || !is_numeric($_GET['stanford_access_control'])) {
-    watchdog('stanford_access_control', 'Illegal call to /protected-page', array(), WATCHDOG_WARNING);
-    drupal_access_denied();
-    exit();
-  }
-
-  $pid = db_select('stanford_access_control')
-    ->fields('stanford_access_control', array('pid'))
-    ->condition('pid', $_GET['stanford_access_control'])
-    ->range(0, 1)
-    ->execute()
-    ->fetchField();
-
-  if (!$pid) {
-    watchdog('stanford_access_control', 'Invalid pid (@pid) used with /protected-page', array('@pid' => $_GET['stanford_access_control']), WATCHDOG_WARNING);
-    drupal_access_denied();
-    exit();
-  }
-
-  $form['stanford_access_control_enter_password'] = array(
-    '#type' => 'fieldset',
-    '#description' => variable_get('stanford_access_control_description', t('The page you are trying to view is password protected. Please enter the password below to proceed.')),
-    '#collapsible' => FALSE,
-  );
-
-  $form['stanford_access_control_enter_password']['password'] = array(
-    '#type' => 'password',
-    '#title' => variable_get('stanford_access_control_password_label', t('Enter Password')),
-    '#size' => 20,
-    '#required' => TRUE,
-  );
-
-  $form['stanford_access_control_pid'] = array(
-    '#type' => 'hidden',
-    '#value' => $_GET['stanford_access_control'],
-  );
-
-  $form['stanford_access_control_enter_password']['submit'] = array(
-    '#type' => 'submit',
-    '#value' => variable_get('stanford_access_control_submit_button_text', t('Authenticate')),
-  );
-
-  return $form;
-}
-
-/**
- * Implements hook_validate().
- */
-function stanford_access_control_enter_password_validate($form, &$form_state) {
-
-  $password = sha1(trim(check_plain($form_state['values']['password'])));
-  $global_password = variable_get('stanford_access_control_global_password', '');
-
-  if ($global_password != $password) {
-    form_set_error('password', variable_get('stanford_access_control_incorrect_password_msg', t('Incorrect password!')));
-  }
-
-}
-
-/**
- * Implements hook_submit().
- */
-function stanford_access_control_enter_password_submit($form, &$form_state) {
-
-  $_SESSION['_stanford_access_control']['passwords'][$form_state['values']['stanford_access_control_pid']]['request_time'] = REQUEST_TIME;
-
-  // Give them 6 minutes of fun then take away their toys.
-  $session_expire_time = variable_get('stanford_access_control_session_expire_time', 360);
-  if ($session_expire_time) {
-    $_SESSION['_stanford_access_control']['passwords'][$form_state['values']['stanford_access_control_pid']]['expire_time'] = strtotime("+{$session_expire_time} minutes");
-  }
-
 }

@@ -17,6 +17,33 @@ function stanford_access_control_schema() {
         'unsigned' => TRUE,
         'not null' => TRUE,
       ),
+      'title' => array(
+        'description' => 'The title of this node, always treated as non-markup plain text.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'path' => array(
+        'type' => 'varchar',
+        'description' => 'The path of the protected page.',
+        'length' => '255',
+        'not null' => TRUE,
+      ),
+      'users' => array(
+        'type' => 'blob',
+        'size' => 'big',
+        'not null' => TRUE,
+        'serialize' => TRUE,
+        'description' => 'Serialized data containing the user ids that can access this.',
+      ),
+      'roles' => array(
+        'type' => 'blob',
+        'size' => 'big',
+        'not null' => TRUE,
+        'serialize' => TRUE,
+        'description' => 'Serialized data containing the roles that can access this.',
+      ),
       'enabled' => array(
         'description' => 'Enable or disable a path protection.',
         'type' => 'int',
@@ -24,17 +51,29 @@ function stanford_access_control_schema() {
         'not null' => TRUE,
         'default' => 1,
       ),
-      'password' => array(
-        'type' => 'varchar',
-        'description' => 'The password of the protected page.',
-        'length' => '128',
+      'owner' => array(
+        'description' => 'The {users}.uid that owns this.',
+        'type' => 'int',
         'not null' => TRUE,
+        'default' => 0,
       ),
-      'path' => array(
-        'type' => 'varchar',
-        'description' => 'The path of the protected page.',
-        'length' => '255',
+      'editor' => array(
+        'description' => 'The {users}.uid that last edited this.',
+        'type' => 'int',
         'not null' => TRUE,
+        'default' => 0,
+      ),
+      'created' => array(
+        'description' => 'The Unix timestamp when this was created.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'changed' => array(
+        'description' => 'The Unix timestamp when this was most recently saved.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
       ),
     ),
     'indexes' => array(
