@@ -15,8 +15,8 @@ include_once("stanford_access_control.inc");
 function stanford_access_control_permission() {
   return array(
     'bypass stanford access protection' => array(
-      'title' => t('bypass stanford access protection'),
-      'description' => t('Bypass the access restrictions'),
+      'title' => t('Bypass Stanford Access protection'),
+      'description' => t('Bypass the access restrictions.'),
     ),
     'administer stanford access control' => array(
       'title' => t('Administer Stanford Access Control module.'),
@@ -429,9 +429,25 @@ function stanford_access_control_preprocess_page(&$vars) {
 
     $allowed = "";
     if (is_array($obj->roles)) {
+      $obj->roles = array_filter($obj->roles);
+      $pop = 0;
+
+      if (count($obj->roles) >= 2) {
+        $pop = array_pop($obj->roles);
+      }
+
       $allowed = implode(", ", $obj->roles);
+
+      if (!empty($pop)) {
+        $allowed .= t(", and ") . $pop;
+      }
+
+      // For John.
+      $allowed .= ".";
+
     }
-    if (is_array($obj->users)) {
+
+    if (is_array($obj->users) && !empty($obj->users)) {
       $allowed .= " " . t("and") . " " . implode(", ", $obj->users);
     }
 

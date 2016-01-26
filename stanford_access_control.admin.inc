@@ -13,7 +13,7 @@
  */
 function stanford_access_control_configure($form, &$form_state) {
 
-  $form["rules_ops"]["create_new"]["#markup"] = "<p>" . l("+ Create new protected path", "admin/config/stanford/access-control/new", array("attributes" => array("class" => "btn"))) . "</p>";
+  $form["rules_ops"]["create_new"]["#markup"] = "<p>" . l(t("+ Create new protected path"), "admin/config/stanford/access-control/new", array("attributes" => array("class" => "btn"))) . "</p>";
 
   $form['rules_list']['pages_table'] = array(
     '#markup' => stanford_access_control_get_pages_list(),
@@ -333,7 +333,7 @@ function stanford_access_control_log_event($type, $data) {
         '!user' => l($user->name, "user/" . $user->uid),
         '@title' => $data["admin_title"],
       );
-      $link = l("See page", "admin/config/stanford/access-control/" . $data["pid"] . "/edit");
+      $link = l(t("See page"), "admin/config/stanford/access-control/" . $data["pid"] . "/edit");
       break;
 
     case 'delete':
@@ -350,7 +350,7 @@ function stanford_access_control_log_event($type, $data) {
         '!user' => l($user->name, "user/" . $user->uid),
         '@title' => $data["admin_title"],
       );
-      $link = l("See page", "admin/config/stanford/access-control/" . $data["pid"] . "/edit");
+      $link = l(t("See page"), "admin/config/stanford/access-control/" . $data["pid"] . "/edit");
       break;
 
     case 'enable':
@@ -359,7 +359,7 @@ function stanford_access_control_log_event($type, $data) {
         '!user' => l($user->name, "user/" . $user->uid),
         '@title' => $data["admin_title"],
       );
-      $link = l("See page", "admin/config/stanford/access-control/" . $data["pid"] . "/edit");
+      $link = l(t("See page"), "admin/config/stanford/access-control/" . $data["pid"] . "/edit");
       break;
   }
 
@@ -389,8 +389,13 @@ function stanford_access_control_delete_confirm($form, &$form_state, $pid) {
   }
 
   $form['pid'] = array(
-    '#type' => 'hidden',
+    '#type' => 'value',
     '#value' => $pid,
+  );
+
+  $form["admin_title"] = array(
+    '#type' => 'value',
+    '#value' => $data->title,
   );
 
   $message = t('Are you sure you want to delete <b>"%path"</b> from protected pages list?', array('%path' => $path));
@@ -405,13 +410,15 @@ function stanford_access_control_delete_confirm($form, &$form_state, $pid) {
  */
 function stanford_access_control_delete_confirm_submit($form, &$form_state) {
 
+  $values = $form_state["values"];
+
   // Die if not confirmed.
-  if (!$form_state['values']['confirm']) {
+  if (!$values['confirm']) {
     return;
   }
 
   // Pid from the form submission.
-  $pid = $form_state['values']['pid'];
+  $pid = $values['pid'];
 
   // Do the delete.
   db_delete('stanford_access_control')
@@ -423,6 +430,9 @@ function stanford_access_control_delete_confirm_submit($form, &$form_state) {
 
   // Let the user know stuff happened.
   drupal_set_message(t('The path has been successfully deleted from the protected pages.'));
+
+  // Log it.
+  stanford_access_control_log_event("delete", array("admin_title" => $values["admin_title"]));
 
   // Got to go somewhere...
   $form_state['redirect'] = 'admin/config/stanford/access-control';
