@@ -152,7 +152,11 @@ function stanford_access_control_delete_rule($pid) {
 
   // Must rebuild node_access table...
   // node_access_needs_rebuild(TRUE);
-  node_access_rebuild();
+  node_access_rebuild(TRUE);
+  menu_rebuild();
+  if (module_exists("views")) {
+    views_invalidate_cache();
+  }
   drupal_flush_all_caches();
 
   return $status;
@@ -193,7 +197,11 @@ function stanford_access_control_create_rule($data) {
 
   // Must rebuild node_access table...
   // node_access_needs_rebuild(TRUE);
-  node_access_rebuild();
+  node_access_rebuild(TRUE);
+  menu_rebuild();
+  if (module_exists("views")) {
+    views_invalidate_cache();
+  }
   drupal_flush_all_caches();
 
   return $status;
@@ -236,7 +244,11 @@ function stanford_access_control_update_rule($data) {
 
   // Must rebuild node_access table...
   // node_access_needs_rebuild(TRUE);
-  node_access_rebuild();
+  node_access_rebuild(TRUE);
+  menu_rebuild();
+  if (module_exists("views")) {
+    views_invalidate_cache();
+  }
   drupal_flush_all_caches();
 
   return $status;
