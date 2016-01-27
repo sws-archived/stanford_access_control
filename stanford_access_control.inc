@@ -190,8 +190,7 @@ function stanford_access_control_create_rule($data) {
   $status = drupal_write_record("stanford_access_control", $data);
 
   // Must rebuild node_access table...
-  node_access_rebuild();
-  menu_rebuild();
+  node_access_needs_rebuild(TRUE);
 
   return $status;
 }
@@ -232,8 +231,7 @@ function stanford_access_control_update_rule($data) {
   $status = drupal_write_record("stanford_access_control", $data, $keys);
 
   // Must rebuild node_access table...
-  node_access_rebuild();
-  menu_rebuild();
+  node_access_needs_rebuild(TRUE);
 
   return $status;
 
