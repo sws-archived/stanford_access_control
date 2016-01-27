@@ -151,7 +151,9 @@ function stanford_access_control_delete_rule($pid) {
     ->execute();
 
   // Must rebuild node_access table...
-  node_access_needs_rebuild(TRUE);
+  // node_access_needs_rebuild(TRUE);
+  node_access_rebuild();
+  drupal_flush_all_caches();
 
   return $status;
 }
@@ -190,7 +192,9 @@ function stanford_access_control_create_rule($data) {
   $status = drupal_write_record("stanford_access_control", $data);
 
   // Must rebuild node_access table...
-  node_access_needs_rebuild(TRUE);
+  // node_access_needs_rebuild(TRUE);
+  node_access_rebuild();
+  drupal_flush_all_caches();
 
   return $status;
 }
@@ -231,7 +235,9 @@ function stanford_access_control_update_rule($data) {
   $status = drupal_write_record("stanford_access_control", $data, $keys);
 
   // Must rebuild node_access table...
-  node_access_needs_rebuild(TRUE);
+  // node_access_needs_rebuild(TRUE);
+  node_access_rebuild();
+  drupal_flush_all_caches();
 
   return $status;
 
