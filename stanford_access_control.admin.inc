@@ -292,9 +292,6 @@ function stanford_access_control_rule_submit($form, &$form_state) {
   // Log the change.
   stanford_access_control_log_event($log_type, $values);
 
-  // Must rebuild node_access table...
-  node_access_rebuild();
-
   // The go somewhere.
   $form_state['redirect'] = 'admin/config/stanford/access-control';
 
@@ -414,9 +411,6 @@ function stanford_access_control_delete_confirm_submit($form, &$form_state) {
   $pid = $values['pid'];
 
   stanford_access_control_delete_rule($pid);
-
-  // Must rebuild node_access table...
-  node_access_rebuild();
 
   // Let the user know stuff happened.
   drupal_set_message(t('The path has been successfully deleted from the protected pages.'));

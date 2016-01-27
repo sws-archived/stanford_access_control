@@ -146,9 +146,14 @@ function stanford_access_control_delete_rule($pid) {
   }
 
   // Do the delete.
-  return db_delete('stanford_access_control')
+  $status = db_delete('stanford_access_control')
     ->condition('pid', $pid)
     ->execute();
+
+  // Must rebuild node_access table...
+  node_access_needs_rebuild(TRUE);
+
+  return $status;
 }
 
 /**
@@ -182,7 +187,13 @@ function stanford_access_control_create_rule($data) {
   // Filter out disabled roles.
   $data["roles"] = array_filter($data["roles"]);
 
-  return drupal_write_record("stanford_access_control", $data);
+  $status = drupal_write_record("stanford_access_control", $data);
+
+  // Must rebuild node_access table...
+  node_access_rebuild();
+  menu_rebuild();
+
+  return $status;
 }
 
 /**
@@ -218,6 +229,12 @@ function stanford_access_control_update_rule($data) {
   unset($data["created"]);
   unset($data["owner"]);
 
-  return drupal_write_record("stanford_access_control", $data, $keys);
+  $status = drupal_write_record("stanford_access_control", $data, $keys);
+
+  // Must rebuild node_access table...
+  node_access_rebuild();
+  menu_rebuild();
+
+  return $status;
 
 }
