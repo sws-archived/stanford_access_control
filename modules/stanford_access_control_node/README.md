@@ -1,19 +1,10 @@
-#[Stanford Access Control](https://github.com/SU-SWS/stanford_access_control)
+#[Stanford Access Control Node](https://github.com/SU-SWS/stanford_access_control)
 ##### Version: 7.x-1.x
 
 Maintainers: [jbickar](https://github.com/jbickar), [sherakama](https://github.com/sherakama)
 [Changelog.txt](CHANGELOG.txt)
 
-This module is used to protect pages or whole sections of a website from being
-viewed by those without the proper permissions. It was greatly inspired by, and
-code harvested from, the [Protected Pages Drupal project](https://www.drupal.org/project/protected_pages).
-
-Sub Modules
----
-
-**[Stanford Access Control Node](https://github.com/SU-SWS/stanford_access_control/modules/stanford_access_control_node)**
-
-This sub module provides an interface for working with node entities and Stanford Access Control.
+This module compliments the Stanford Acccess Control module and provides a UI for working with node entities.
 
 Installation
 ---

@@ -10,14 +10,16 @@
  *   The aliased path of the current page.
  * @param string $alias
  *   The menu router path for the current page.
- * @param boolean $keys
+ * @param bool $keys
  *   True if the only thing the caller wants is an array of the pids.
+ * @param bool $allow_disabled
+ *   Allow for matching of disabled paths.
  *
  * @return mixed
  *   FALSE if the page is UNLOCKED.
  *   An array of rule information.
  */
-function stanford_access_control_get_pids_by_path($normal_path, $alias = NULL, $keys = FALSE) {
+function stanford_access_control_get_pids_by_path($normal_path, $alias = NULL, $keys = FALSE, $allow_disabled = FALSE) {
 
   // Get saved options from DB.
   $options = stanford_access_control_get_config_array();
@@ -35,8 +37,8 @@ function stanford_access_control_get_pids_by_path($normal_path, $alias = NULL, $
   // Loop through the options and try to match the paths.
   foreach ($options as $obj) {
 
-    // Only for enabled types.
-    if (!$obj->enabled) {
+    // Only for enabled types when not explicit.
+    if (!$allow_disabled && !$obj->enabled) {
       continue;
     }
 
@@ -128,4 +130,94 @@ function stanford_access_control_get_config_array($pid = NULL) {
 function stanford_access_control_deny_access() {
   drupal_access_denied();
   exit();
+}
+
+/**
+ * Delete a rule by pid.
+ * @param int $pid
+ *   The pid key to delete from the database
+ * @return bool
+ *   True if db_delete worked. False otherwise.
+ */
+function stanford_access_control_delete_rule($pid) {
+
+  if (!is_numeric($pid)) {
+    throw new Exception("PID must be numeric");
+  }
+
+  // Do the delete.
+  return db_delete('stanford_access_control')
+    ->condition('pid', $pid)
+    ->execute();
+}
+
+/**
+ * Saves a new rule to the database.
+ *
+ * Assumes all validation has already happened. Writes to database.
+ *
+ * @param array $data
+ *   An array of keyed data to pass to drupal_write_record.
+ *
+ * @return bool
+ *   success or not.
+ */
+function stanford_access_control_create_rule($data) {
+
+  global $user;
+  $defaults = array(
+    'path' => NULL,
+    'title' => "Missing Title",
+    'users' => array(),
+    'roles' => $user->roles,
+    'enabled' => 1,
+    'editor' => $user->uid,
+    'changed' => time(),
+    'owner' => $user->uid,
+    'created' => time(),
+  );
+
+  $data = array_merge($defaults, $data);
+
+  // Filter out disabled roles.
+  $data["roles"] = array_filter($data["roles"]);
+
+  return drupal_write_record("stanford_access_control", $data);
+}
+
+/**
+ * Updates an existing rule.
+ *
+ * Assumes all validation has already happened. Writes to database.
+ *
+ * @param array $data
+ *   An array of keyed data to pass to drupal_write_record.
+ *
+ * @return bool
+ *   success or not.
+ */
+function stanford_access_control_update_rule($data) {
+
+  global $user;
+  $keys = array("pid");
+  $defaults = array(
+    'path' => NULL,
+    'title' => "Missing Title",
+    'users' => array(),
+    'roles' => $user->roles,
+    'editor' => $user->uid,
+    'changed' => time(),
+    'pid' => NULL,
+  );
+  $data = array_merge($defaults, $data);
+
+  // Filter out disabled roles.
+  $data["roles"] = array_filter($data["roles"]);
+
+  // don't want to change some things.
+  unset($data["created"]);
+  unset($data["owner"]);
+
+  return drupal_write_record("stanford_access_control", $data, $keys);
+
 }

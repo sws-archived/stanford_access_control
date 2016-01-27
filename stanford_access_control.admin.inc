@@ -132,6 +132,7 @@ function stanford_access_control_edit_rule_form($form, &$form_state, $pid) {
   $form['rules_list']['path']["#default_value"] = $protected_page->path;
   $form['rules_list']['enabled']["#default_value"] = $protected_page->enabled;
   $form['rules_list']['admin_title']["#default_value"] = $protected_page->title;
+  $form['rules_list']['roles']["#default_value"] = $protected_page->roles;
 
   // Add the pid.
   $form['rules_list']['pid'] = array(
@@ -265,11 +266,8 @@ function stanford_access_control_rule_submit($form, &$form_state) {
   $data = array(
     'path' => check_plain($values["path"]),
     'title' => check_plain($values["admin_title"]),
-    'users' => array(), // for later when we can get this to work.
     'roles' => $values["roles"],
     'enabled' => $values["enabled"],
-    'editor' => $user->uid,
-    'changed' => time(),
   );
 
   // If we are creating a new entry.
@@ -278,19 +276,14 @@ function stanford_access_control_rule_submit($form, &$form_state) {
     // For the log.
     $log_type = "create";
 
-    // Add some more information.
-    $data["owner"] = $user->uid;
-    $data["created"] = time();
-
     // Write to the db.
-    drupal_write_record("stanford_access_control", $data);
+    stanford_access_control_create_rule($data);
   }
   // If we are updating an entry.
   else {
     // Must have pid as key.
-    $keys = array("pid");
     $data["pid"] = $values["pid"];
-    drupal_write_record("stanford_access_control", $data, $keys);
+    stanford_access_control_update_rule($data);
   }
 
   // Let the user know everything is ok.
@@ -420,10 +413,7 @@ function stanford_access_control_delete_confirm_submit($form, &$form_state) {
   // Pid from the form submission.
   $pid = $values['pid'];
 
-  // Do the delete.
-  db_delete('stanford_access_control')
-    ->condition('pid', $pid)
-    ->execute();
+  stanford_access_control_delete_rule($pid);
 
   // Must rebuild node_access table...
   node_access_rebuild();
