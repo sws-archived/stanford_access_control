@@ -434,7 +434,7 @@ function stanford_access_control_preprocess_page(&$vars) {
 
   $normal_path = drupal_get_normal_path(current_path());
   $pids = stanford_access_control_get_pids_by_path($normal_path);
-  $message = "This page is protected by the !title protection rule and permits the following to view: @allowed";
+  $message = "This page is protected by the !title protection rule and permits the following role(s) to view: @allowed";
 
   // Nothing to do with no results.
   if (!is_array($pids)) {
@@ -472,16 +472,19 @@ function stanford_access_control_preprocess_page(&$vars) {
       $allowed .= " " . t("and") . " " . implode(", ", $obj->users);
     }
 
-    drupal_set_message(
-      t(
-        $message,
-        array(
-          "!title" => $link_to_rule,
-          "@allowed" => $allowed
-        )
-      ),
-      "stanford-access-control"
-    );
+    // Only show the message if our user can do something about it.
+    if (user_access("administer stanford access control")) {
 
+      drupal_set_message(
+        t(
+          $message,
+          array(
+            "!title" => $link_to_rule,
+            "@allowed" => $allowed
+          )
+        ),
+        "stanford-access-control"
+      );
+    }
   }
 }
