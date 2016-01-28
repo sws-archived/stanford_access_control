@@ -78,7 +78,7 @@ function stanford_access_control_get_pages_list() {
       "sticky" => TRUE,
       "caption" => "",
       "colgroups" => array(),
-      "empty" => t("No record found!"),
+      "empty" => t("No record(s) found!"),
     )
   );
 
