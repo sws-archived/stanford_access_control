@@ -129,6 +129,11 @@ function stanford_access_control_node_node_insert($node) {
  */
 function stanford_access_control_node_node_update($node) {
 
+  // Only operate if the information is available.
+  if (!isset($node->sac)) {
+    return;
+  }
+
   $enabled = $node->sac["enabled"];
   $normal_path = "node/" . $node->nid;
   $rules = stanford_access_control_get_pids_by_path($normal_path);
