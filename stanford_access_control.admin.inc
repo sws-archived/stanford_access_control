@@ -158,6 +158,9 @@ function stanford_access_control_configure_submit_add_roles(&$form_state) {
       'roles' => array_merge($rule->roles, $roles),
     );
     stanford_access_control_update_rule($data, TRUE);
+    // For the log.
+    $data["admin_title"] = $rule->title;
+    stanford_access_control_log_event("update", $data);
   }
 
   // Must rebuild node_access table...
@@ -189,6 +192,9 @@ function stanford_access_control_configure_submit_del_roles(&$form_state) {
       'roles' => array_diff($rule->roles, $roles),
     );
     stanford_access_control_update_rule($data, TRUE);
+    // For the log.
+    $data["admin_title"] = $rule->title;
+    stanford_access_control_log_event("update", $data);
   }
 
   // Must rebuild node_access table...
@@ -212,18 +218,17 @@ function stanford_access_control_configure_submit_enable(&$form_state) {
     return;
   }
 
-  $orq = db_or();
   foreach ($pids as $pid) {
-    $orq->condition("pid", $pid);
+    $rule = stanford_access_control_get_config_array($pid);
+    $data = array(
+      'pid' => $pid,
+      'enabled' => 1,
+    );
+    stanford_access_control_update_rule($data, TRUE);
+    // For the log.
+    $data["admin_title"] = $rule->title;
+    stanford_access_control_log_event("enable", $data);
   }
-
-  // Bulk.
-  db_update("stanford_access_control")
-    ->fields(array(
-      "enabled" => 1,
-    ))
-    ->condition($orq)
-    ->execute();
 
   // Must rebuild node_access table...
   stanford_access_control_rebuild_and_clear_caches();
@@ -245,18 +250,17 @@ function stanford_access_control_configure_submit_disable(&$form_state) {
     return;
   }
 
-  $orq = db_or();
   foreach ($pids as $pid) {
-    $orq->condition("pid", $pid);
+    $rule = stanford_access_control_get_config_array($pid);
+    $data = array(
+      'pid' => $pid,
+      'enabled' => 0,
+    );
+    stanford_access_control_update_rule($data, TRUE);
+    // For the log.
+    $data["admin_title"] = $rule->title;
+    stanford_access_control_log_event("disable", $data);
   }
-
-  // Bulk.
-  db_update("stanford_access_control")
-    ->fields(array(
-      "enabled" => 0,
-    ))
-    ->condition($orq)
-    ->execute();
 
   // Must rebuild node_access table...
   stanford_access_control_rebuild_and_clear_caches();
@@ -278,14 +282,15 @@ function stanford_access_control_configure_submit_delete($pids) {
     return;
   }
 
-  $orq = db_or();
   foreach ($clean as $pid) {
-    $orq->condition("pid", $pid);
+    $rule = stanford_access_control_get_config_array($pid);
+    stanford_access_control_delete_rule($pid, TRUE);
+    // For the log.
+    $data = array();
+    $data["admin_title"] = $rule->title;
+    $data["pid"] = $pid;
+    stanford_access_control_log_event("delete", $data);
   }
-
-  db_delete("stanford_access_control")
-    ->condition($orq)
-    ->execute();
 
   // Something changed. Clear clear clear!
   stanford_access_control_rebuild_and_clear_caches();

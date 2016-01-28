@@ -230,9 +230,6 @@ function stanford_access_control_update_rule($data, $skip = FALSE) {
   );
   $data = array_merge($defaults, $data);
 
-  // Filter out disabled roles.
-  $data["roles"] = array_filter($data["roles"]);
-
   // don't want to change some things.
   unset($data["created"]);
   unset($data["owner"]);
