@@ -13,6 +13,8 @@
  */
 function stanford_access_control_configure($form, &$form_state) {
 
+  global $user;
+
   // Confirmation step for delete:
   // ---------------------------------------------------------------------------
 
