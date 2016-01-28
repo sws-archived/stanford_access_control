@@ -1,0 +1,192 @@
+<?php
+/**
+ * @file
+ * File description
+ *
+ * Long description
+ */
+
+/**
+ * Implements hook_form_alter().
+ */
+function stanford_access_control_bean_form_alter(&$form, &$form_state, $form_id) {
+
+  // Only bean edit forms pls.
+  if ($form_id !== "bean_form") {
+    return;
+  }
+
+  $rule = FALSE;
+  $rules = array();
+  $role_opts = user_roles();
+  $role_opts_keyed = array_combine($role_opts, $role_opts);
+  global $user;
+
+  // If we are editing a node and not creating a new one.
+  if (isset($form["bean"]['#value']->delta)) {
+    $normal_path = "block/" . $form["bean"]['#value']->delta;
+    $rules = stanford_access_control_get_pids_by_path($normal_path, NULL, FALSE, TRUE);
+    $rule = (is_array($rules)) ? array_pop($rules) : FALSE;
+  }
+
+  // Create a vertical tab for this.
+  $form["sac"] = array(
+    "#type" => "fieldset",
+    "#title" => t("Stanford Access Control"),
+    "#collapsible" => TRUE,
+    "#collapsed" => count($rules),
+    "#access" => user_access("administer stanford access control"),
+    "#group" => "additional_settings",
+    "#tree" => TRUE,
+    "#weight" => 10,
+  );
+
+  $form["sac"]["enabled"] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Protect this page'),
+    '#description' => t('Uncheck to disable this protected path.'),
+    '#default_value' => (isset($rule->pid) && $rule->pid),
+  );
+
+  $form['sac']['roles'] = array(
+    '#type' => 'checkboxes',
+    '#title' => 'Roles that can view',
+    '#description' => t("The roles selected here will be able to view the pages protected by this path rule"),
+    '#options' => $role_opts_keyed,
+    '#default_value' => isset($rule->roles) ? $rule->roles : $user->roles,
+    '#states' => array(
+      'visible' => array(
+        ':input[name="sac[enabled]"]' => array('checked' => TRUE),
+      ),
+    )
+  );
+
+  // If we have an active rule lets provide a link to the advanced settings.
+  if (isset($rule->pid)) {
+
+    if (!$rule->enabled) {
+      $form['sac']['disabled_notice'] = array(
+        "#prefix" => "<p class=\"warning\">",
+        "#suffix" => "</p>",
+        '#markup' => t("The rule that is protecting this page has been disabled. Please view the advanced settings to enable it."),
+      );
+    }
+
+    $form['sac']['link_to_main'] = array(
+      "#prefix" => "<p>",
+      "#suffix" => "</p>",
+      '#markup' => t("View ") . l(t("advanced settings"), "admin/config/stanford/access-control/" . $rule->pid . "/edit"),
+    );
+
+  }
+
+  // Add my own validate hook.
+  $form["#validate"][] = "stanford_access_control_bean_form_alter_validate";
+
+}
+
+/**
+ * Validate the contents of our little form alter.
+ */
+function stanford_access_control_bean_form_alter_validate($form, &$form_state) {
+
+  // If the user did not have access to the vertical tab then just quit.
+  if (!isset($form_state["values"]["sac"]["enabled"])) {
+    return;
+  }
+
+  // Check if the rule was enabled and that some roles were selected.
+  $selected = array_filter($form_state["values"]["sac"]["roles"]);
+  if ($form_state["values"]["sac"]["enabled"] && empty($selected)) {
+    form_set_error("sac][roles", "You must select at least one role if you are going to enable protection.");
+  }
+
+}
+
+/**
+ * Implements hook_node_insert().
+ */
+function stanford_access_control_bean_entity_insert($entity) {
+
+  if ($entity->entityType() !== "bean") {
+    return;
+  }
+
+  // If the user did not have access to the vertical tab then just quit.
+  // Also quit if the checkbox is not enabled.
+  if (!isset($entity->sac["enabled"]) || !$entity->sac["enabled"]) {
+    return;
+  }
+
+  $data = array(
+    "title" => $entity->adminTitle(),
+    "path" => $entity->url(),
+    "roles" => $entity->sac["roles"],
+    "enabled" => $entity->sac["enabled"],
+  );
+
+  stanford_access_control_create_rule($data);
+
+}
+
+/**
+ * Implements hook_node_update().
+ */
+function stanford_access_control_bean_entity_update($entity) {
+
+  if ($entity->entityType() !== "bean") {
+    return;
+  }
+
+  $bean = $entity;
+  $enabled = $bean->sac["enabled"];
+  $normal_path = $bean->url();
+  $rules = stanford_access_control_get_pids_by_path($normal_path);
+  $rule = (is_array($rules)) ? array_pop($rules) : FALSE;
+
+  // If the checkbox was unchecked try to find a corresponding rule and remove it.
+  if (!$enabled) {
+    if (isset($rule->pid)) {
+      stanford_access_control_delete_rule($rule->pid);
+      drupal_set_message("Removed protection rule: " . $rule->title, "status");
+    }
+    // Nothing more to do. End here.
+    return;
+  }
+
+  // Must be enabled at this point.
+  $data = array(
+    'path' => $normal_path,
+    'title' => $bean->adminTitle(),
+    'roles' => $bean->sac['roles'],
+  );
+
+  // If we have an existing rule we need to update it.
+  if (isset($rule->pid)) {
+    $data['pid'] = $rule->pid;
+    stanford_access_control_update_rule($data);
+  }
+  // Otherwise we create one.
+  else {
+    stanford_access_control_create_rule($data);
+  }
+
+}
+
+/**
+ * Implements hook_node_delete().
+ */
+function stanford_access_control_bean_entity_delete($entity) {
+
+  if ($entity->entityType() !== "bean") {
+    return;
+  }
+
+  $normal_path = $entity->url();
+  $rules = stanford_access_control_get_pids_by_path($normal_path);
+  $rule = (is_array($rules)) ? array_pop($rules) : FALSE;
+  if (isset($rule->pid)) {
+    stanford_access_control_delete_rule($rule->pid);
+    drupal_set_message("Removed protection rule: " . $rule->title, "status");
+  }
+}

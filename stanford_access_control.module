@@ -225,7 +225,15 @@ function stanford_access_control_node_access_records($node) {
  *  True if access is allowed, FALSE if not.
  */
 function stanford_access_control_bean_access($bean, $op, $account) {
-  return TRUE;
+
+  // Don't futz with other ops.
+  if ($op !== "view") {
+    return TRUE;
+  }
+
+  $normal_path = drupal_get_normal_path($bean->url());
+  return stanford_access_control_check_user_access($normal_path, $account);
+
 }
 
 /**
