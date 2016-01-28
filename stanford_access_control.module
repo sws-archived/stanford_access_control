@@ -98,9 +98,9 @@ function stanford_access_control_init() {
   }
 
   // If the page is a node let the node_access hook handle things.
-  // TODO: Check to see if loading the node this early is an issue.
-  $node = menu_get_object();
-  if ($node) {
+  $a0 = arg(0);
+  $a1 = arg(1);
+  if ($a0 == "node" && is_numeric($a1)) {
     return;
   }
 
