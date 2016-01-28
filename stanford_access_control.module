@@ -298,11 +298,12 @@ function stanford_access_control_check_user_access($path = NUll, $user = NULL) {
     }
 
     // Check if any of the roles match.
-    $intersect = array_intersect($user->roles, array_values($roles));
-    if ($intersect) {
-      $access = TRUE;
+    if (is_array($roles)) {
+      $intersect = array_intersect($user->roles, array_values($roles));
+      if ($intersect) {
+        $access = TRUE;
+      }
     }
-
   }
 
   return $access;
