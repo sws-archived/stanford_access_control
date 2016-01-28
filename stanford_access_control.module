@@ -137,6 +137,11 @@ function stanford_access_control_node_access($node, $op, $account) {
     return NODE_ACCESS_IGNORE;
   }
 
+  // Don't mess with unpublished/published workflows.
+  if ((int) $node->status === 0 && !user_access("view own unpublished content", $account)) {
+    return NODE_ACCESS_DENY;
+  }
+
   // Always let go if the user has the bypass.
   if (user_access('bypass stanford access protection')) {
     return NODE_ACCESS_IGNORE;
@@ -190,6 +195,11 @@ function stanford_access_control_node_access_records($node) {
     $access = stanford_access_control_check_user_access($path, $account);
 
     if (!$access) {
+      continue;
+    }
+
+    // Don't mess with unpublished/published workflows.
+    if ((int) $node->status === 0 && !user_access("view own unpublished content", $account)) {
       continue;
     }
 
