@@ -31,7 +31,7 @@ function stanford_access_control_configure($form, &$form_state) {
   $form["rules_ops"]["create_new"]["#markup"] = "<p>" . l(t("+ Create new protected path"), "admin/config/stanford/access-control/new", array("attributes" => array("class" => "btn"))) . "</p>";
 
   $form["bulk_ops"] = array(
-    "#title" => t("Bulk Operations"),
+    "#title" => t("Operations"),
     "#type" => "fieldset",
     '#collapsible' => TRUE,
     '#collapsed' => FALSE,
@@ -65,7 +65,7 @@ function stanford_access_control_configure($form, &$form_state) {
 
   $form["bulk_ops"]['submit'] = array(
     '#type' => 'submit',
-    '#value' => t('Apply'),
+    '#value' => t('Execute'),
   );
 
   $form['rules_table'] = stanford_access_control_get_pages_list();
@@ -327,7 +327,7 @@ function stanford_access_control_get_pages_list() {
     array(
       'data' => t('Modified Date'),
       'field' => 'changed',
-      'sort' => 'ASC',
+      'sort' => 'DESC',
     ),
     array(
       'data' => t('Operations'),
@@ -342,11 +342,13 @@ function stanford_access_control_get_pages_list() {
     ->extend('TableSort');
 
   $query->fields('sac')
-    ->limit(30)
-    ->orderByHeader($header);
+    ->limit(30);
 
   if (!isset($_GET["order"])) {
     $query->orderBy("changed", "DESC");
+  }
+  else {
+    $query->orderByHeader($header);
   }
 
   $result = $query->execute();
