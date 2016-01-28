@@ -442,6 +442,8 @@ function stanford_access_control_preprocess_page(&$vars) {
     $allowed = "";
     if (is_array($obj->roles)) {
       $obj->roles = array_filter($obj->roles);
+      // Save this array for use later, before we pop it.
+      $pid_roles = $obj->roles;
       $pop = 0;
 
       if (count($obj->roles) >= 2) {
@@ -469,10 +471,10 @@ function stanford_access_control_preprocess_page(&$vars) {
     $user_obj = $user;
 
     // What's the overlap between the role(s) of the current user and the role(s) of the protection rule?
-    $message_roles = array_intersect($obj->roles, $user_obj->roles);
+    $message_roles = array_intersect($pid_roles, $user_obj->roles);
 
     // If our user's has a role the same as one of the ones in the protection rule, or if uid=1.
-    if ((is_array($obj->roles) && !empty($message_roles)) || $user_obj->uid == 1) {
+    if ((is_array($pid_roles) && !empty($message_roles)) || user_access("bypass stanford access protection")) {
 
       drupal_set_message(
         t(
