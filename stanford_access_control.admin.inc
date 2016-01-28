@@ -13,15 +13,211 @@
  */
 function stanford_access_control_configure($form, &$form_state) {
 
+  // Confirmation step:
+  if (isset($form_state["storage"]["confirm"])) {
+    $question = "Are you sure you want to delete these protected paths?";
+    $description = "These changes are permanent and cannot be undone";
+    $path = current_path();
+    return confirm_form($form, $question, $path, $description);
+  }
+
   $form["rules_ops"]["create_new"]["#markup"] = "<p>" . l(t("+ Create new protected path"), "admin/config/stanford/access-control/new", array("attributes" => array("class" => "btn"))) . "</p>";
 
-  $form['rules_list']['pages_table'] = array(
-    '#markup' => stanford_access_control_get_pages_list(),
+  $form["bulk_ops"] = array(
+    "#title" => t("Bulk Operations"),
+    "#type" => "fieldset",
+    '#collapsible' => TRUE,
+    '#collapsed' => FALSE,
   );
+
+  $form["bulk_ops"]["operations"] = array(
+    "#type" => "select",
+    "#options" => array(
+      'enable' => t("Enable"),
+      'disable' => t("Disable"),
+      'delete' => t("Delete"),
+      'add_roles' => t("Add Roles"),
+      'del_roles' => t("Remove Roles"),
+    ),
+  );
+
+  $role_opts = user_roles();
+  $role_opts_keyed = array_combine($role_opts, $role_opts);
+  $form['bulk_ops']['roles'] = array(
+    '#type' => 'checkboxes',
+    '#title' => 'Roles that can view',
+    '#options' => $role_opts_keyed,
+    '#default_value' => isset($user->roles) ? $user->roles : "",
+    '#states' => array(
+      'visible' => array(
+        array(':input[name="operations"]' => array('value' => "add_roles")),
+        array(':input[name="operations"]' => array('value' => "del_roles")),
+      ),
+    )
+  );
+
+  $form["bulk_ops"]['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Apply'),
+  );
+
+  $form['rules_table'] = stanford_access_control_get_pages_list();
+
+  $form["table_pager"]["#markup"] = theme('pager', array('tags' => array()));
+
+  // Add some hooks.
+  $form["#validate"][] = "stanford_access_control_configure_validate";
+  $form["#submit"][] = "stanford_access_control_configure_submit";
 
   return $form;
 }
 
+/**
+ * [stanford_access_control_configure_validate description]
+ * @param  [type] &$form       [description]
+ * @param  [type] &$form_state [description]
+ * @return [type]              [description]
+ */
+function stanford_access_control_configure_validate(&$form, &$form_state) {
+  // Nothing doing here.
+}
+
+/**
+ * [stanford_access_control_configure_submit description]
+ * @param  [type] $form        [description]
+ * @param  [type] &$form_state [description]
+ * @return [type]              [description]
+ */
+function stanford_access_control_configure_submit($form, &$form_state) {
+  $values = $form_state["values"];
+
+  // What is the op?
+  $op = isset($values["operations"]) ? $values["operations"] : "";
+  if (isset($form_state["values"]["confirm"]) && isset($form_state["storage"]["op"])) {
+    $op = $form_state["storage"]["op"];
+  }
+
+  switch ($op) {
+    case 'modify':
+      stanford_access_control_configure_submit_modify($form_state);
+      break;
+
+    case 'enable':
+      stanford_access_control_configure_submit_enable($form_state);
+      break;
+
+    case 'disable':
+      stanford_access_control_configure_submit_disable($form_state);
+      break;
+
+    case 'delete':
+      $form_state['storage']['op'] = "delete_confirmed";
+      $form_state['storage']['rules_table'] = array_filter($form_state["values"]['rules_table']);
+      $form_state['storage']['confirm'] = TRUE;
+      $form_state['rebuild'] = TRUE;
+      break;
+
+    case "delete_confirmed":
+      stanford_access_control_configure_submit_delete($form_state['storage']['rules_table']);
+      break;
+
+    default:
+      drupal_set_message("Nothing doing?", "error");
+  }
+}
+
+/**
+ * [stanford_access_control_configure_submit_modify description]
+ * @param  [type] &$form_state [description]
+ * @return [type]              [description]
+ */
+function stanford_access_control_configure_submit_modify(&$form_state) {
+
+}
+
+/**
+ * [stanford_access_control_configure_submit_enable description]
+ * @param  [type] &$form_state [description]
+ * @return [type]              [description]
+ */
+function stanford_access_control_configure_submit_enable(&$form_state) {
+  $values = $form_state["values"];
+  $pids = array_filter($values["rules_table"]);
+
+  $orq = db_or();
+  foreach ($pids as $pid) {
+    $orq->condition("pid", $pid);
+  }
+
+  // Bulk.
+  db_update("stanford_access_control")
+    ->fields(array(
+      "enabled" => 1,
+    ))
+    ->condition($orq)
+    ->execute();
+
+  // Must rebuild node_access table...
+  stanford_access_control_rebuild_and_clear_caches();
+
+  drupal_set_message("The protected paths have been enabled.");
+}
+
+/**
+ * [stanford_access_control_configure_submit_disable description]
+ * @param  [type] &$form_state [description]
+ * @return [type]              [description]
+ */
+function stanford_access_control_configure_submit_disable(&$form_state) {
+  $values = $form_state["values"];
+  $pids = array_filter($values["rules_table"]);
+
+  $orq = db_or();
+  foreach ($pids as $pid) {
+    $orq->condition("pid", $pid);
+  }
+
+  // Bulk.
+  db_update("stanford_access_control")
+    ->fields(array(
+      "enabled" => 0,
+    ))
+    ->condition($orq)
+    ->execute();
+
+  // Must rebuild node_access table...
+  stanford_access_control_rebuild_and_clear_caches();
+
+  drupal_set_message("The protected paths have been disabled.", "status");
+}
+
+/**
+ * [stanford_access_control_configure_submit_delete description]
+ * @param  [type] &$form_state [description]
+ * @return [type]              [description]
+ */
+function stanford_access_control_configure_submit_delete($pids) {
+  $clean = array_filter($pids);
+
+  // Need at least one item.
+  if (empty($clean)) {
+    return;
+  }
+
+  $orq = db_or();
+  foreach ($clean as $pid) {
+    $orq->condition("pid", $pid);
+  }
+
+  db_delete("stanford_access_control")
+    ->condition($orq)
+    ->execute();
+
+  // Something changed. Clear clear clear!
+  stanford_access_control_rebuild_and_clear_caches();
+
+  drupal_set_message("The protected paths have been deleted.", "status");
+}
 
 /**
  * Callback to generate list of protected pages.
@@ -31,12 +227,28 @@ function stanford_access_control_get_pages_list() {
   $header = array(
     array(
       'data' => t('#'),
+      'field' => 'pid',
+      'sort' => 'ASC',
+    ),
+    array(
+      'data' => t('Admin Title'),
+      'field' => 'title',
+      'sort' => 'ASC',
     ),
     array(
       'data' => t('Protected Path(s)'),
+      'field' => 'path',
+      'sort' => 'ASC',
     ),
     array(
-      'data' => t('Enabled / Disabled'),
+      'data' => t('Status'),
+      'field' => 'enabled',
+      'sort' => 'ASC',
+    ),
+    array(
+      'data' => t('Modified Date'),
+      'field' => 'changed',
+      'sort' => 'ASC',
     ),
     array(
       'data' => t('Operations'),
@@ -45,45 +257,46 @@ function stanford_access_control_get_pages_list() {
   );
 
   $rows = array();
+
   $query = db_select('stanford_access_control', 'sac')
     ->extend('PagerDefault')
     ->extend('TableSort');
 
   $query->fields('sac')
-    ->limit(20)
+    ->limit(30)
     ->orderByHeader($header);
+
+  if (!isset($_GET["order"])) {
+    $query->orderBy("changed", "DESC");
+  }
 
   $result = $query->execute();
 
   $rows = array();
-  $count = 1;
+
   foreach ($result as $data) {
-    $rows[] = array(
-      'data' =>
-      array(
-        $count,
-        $data->path,
-        ($data->enabled) ? t("Enabled") : t("Disabled"),
-        l(t('Edit'), "admin/config/stanford/access-control/" . $data->pid . "/edit"),
-        l(t('Delete'), 'admin/config/stanford/access-control/' . $data->pid . "/delete"),
-      ),
+    $rows[$data->pid] = array(
+      $data->pid,
+      $data->title,
+      $data->path,
+      ($data->enabled) ? t("Enabled") : t("Disabled"),
+      format_date($data->changed, "short"),
+      l(t('Edit'), "admin/config/stanford/access-control/" . $data->pid . "/edit") . ' <span class=\"separator\">|</span> ' .
+      l(t('Delete'), 'admin/config/stanford/access-control/' . $data->pid . "/delete"),
     );
-    $count++;
   }
 
-  $output = theme('table',
-    array(
-      'header' => $header,
-      'rows' => $rows,
-      "sticky" => TRUE,
-      "caption" => "",
-      "colgroups" => array(),
-      "empty" => t("No record found!"),
-    )
+  return array(
+    '#type' => 'tableselect',
+    "#header" => $header,
+    "#options" => $rows,
+    "#sticky" => TRUE,
+    "#js_select" => TRUE,
+    "#caption" => "",
+    "#colgroups" => array(),
+    "#empty" => t("No records found!"),
   );
 
-  $output .= theme('pager', array('tags' => array()));
-  return $output;
 }
 
 /**

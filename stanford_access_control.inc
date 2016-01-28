@@ -151,13 +151,7 @@ function stanford_access_control_delete_rule($pid) {
     ->execute();
 
   // Must rebuild node_access table...
-  // node_access_needs_rebuild(TRUE);
-  node_access_rebuild(TRUE);
-  menu_rebuild();
-  if (module_exists("views")) {
-    views_invalidate_cache();
-  }
-  drupal_flush_all_caches();
+  stanford_access_control_rebuild_and_clear_caches();
 
   return $status;
 }
@@ -196,13 +190,7 @@ function stanford_access_control_create_rule($data) {
   $status = drupal_write_record("stanford_access_control", $data);
 
   // Must rebuild node_access table...
-  // node_access_needs_rebuild(TRUE);
-  node_access_rebuild(TRUE);
-  menu_rebuild();
-  if (module_exists("views")) {
-    views_invalidate_cache();
-  }
-  drupal_flush_all_caches();
+  stanford_access_control_rebuild_and_clear_caches();
 
   return $status;
 }
@@ -223,10 +211,10 @@ function stanford_access_control_update_rule($data) {
   global $user;
   $keys = array("pid");
   $defaults = array(
-    'path' => NULL,
-    'title' => "Missing Title",
-    'users' => array(),
-    'roles' => $user->roles,
+    // 'path' => NULL,
+    // 'title' => "Missing Title",
+    // 'users' => array(),
+    // 'roles' => $user->roles,
     'editor' => $user->uid,
     'changed' => time(),
     'pid' => NULL,
@@ -243,6 +231,17 @@ function stanford_access_control_update_rule($data) {
   $status = drupal_write_record("stanford_access_control", $data, $keys);
 
   // Must rebuild node_access table...
+  stanford_access_control_rebuild_and_clear_caches();
+
+  return $status;
+
+}
+
+/**
+ * When something changes we need to do some heavy lifting to get it to appear
+ * right away.
+ */
+function stanford_access_control_rebuild_and_clear_caches() {
   // node_access_needs_rebuild(TRUE);
   node_access_rebuild(TRUE);
   menu_rebuild();
@@ -250,7 +249,4 @@ function stanford_access_control_update_rule($data) {
     views_invalidate_cache();
   }
   drupal_flush_all_caches();
-
-  return $status;
-
 }
