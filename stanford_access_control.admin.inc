@@ -13,13 +13,18 @@
  */
 function stanford_access_control_configure($form, &$form_state) {
 
-  // Confirmation step:
+  // Confirmation step for delete:
+  // ---------------------------------------------------------------------------
+
   if (isset($form_state["storage"]["confirm"])) {
     $question = "Are you sure you want to delete these protected paths?";
     $description = "These changes are permanent and cannot be undone";
     $path = current_path();
     return confirm_form($form, $question, $path, $description);
   }
+
+  // Normal form
+  // ---------------------------------------------------------------------------
 
   $form["rules_ops"]["create_new"]["#markup"] = "<p>" . l(t("+ Create new protected path"), "admin/config/stanford/access-control/new", array("attributes" => array("class" => "btn"))) . "</p>";
 
@@ -98,8 +103,12 @@ function stanford_access_control_configure_submit($form, &$form_state) {
   }
 
   switch ($op) {
-    case 'modify':
-      stanford_access_control_configure_submit_modify($form_state);
+    case 'add_roles':
+      stanford_access_control_configure_submit_add_roles($form_state);
+      break;
+
+    case 'del_roles':
+      stanford_access_control_configure_submit_del_roles($form_state);
       break;
 
     case 'enable':
@@ -112,8 +121,8 @@ function stanford_access_control_configure_submit($form, &$form_state) {
 
     case 'delete':
       $form_state['storage']['op'] = "delete_confirmed";
-      $form_state['storage']['rules_table'] = array_filter($form_state["values"]['rules_table']);
       $form_state['storage']['confirm'] = TRUE;
+      $form_state['storage']['rules_table'] = array_filter($form_state["values"]['rules_table']);
       $form_state['rebuild'] = TRUE;
       break;
 
@@ -127,11 +136,63 @@ function stanford_access_control_configure_submit($form, &$form_state) {
 }
 
 /**
- * [stanford_access_control_configure_submit_modify description]
+ * [stanford_access_control_configure_submit_add_roles description]
  * @param  [type] &$form_state [description]
  * @return [type]              [description]
  */
-function stanford_access_control_configure_submit_modify(&$form_state) {
+function stanford_access_control_configure_submit_add_roles(&$form_state) {
+  $pids = array_filter($form_state["values"]["rules_table"]);
+  $roles = array_filter($form_state["values"]["roles"]);
+
+  if (empty($pids) || empty($roles)) {
+    drupal_set_message("Please select both protected paths and roles.", "error");
+    return;
+  }
+
+  foreach ($pids as $pid) {
+    $rule = stanford_access_control_get_config_array($pid);
+    $data = array(
+      'pid' => $pid,
+      'roles' => array_merge($rule->roles, $roles),
+    );
+    stanford_access_control_update_rule($data, TRUE);
+  }
+
+  // Must rebuild node_access table...
+  stanford_access_control_rebuild_and_clear_caches();
+
+  drupal_set_message("The protected paths have been modified.");
+
+}
+
+/**
+ * [stanford_access_control_configure_submit_del_roles description]
+ * @param  [type] &$form_state [description]
+ * @return [type]              [description]
+ */
+function stanford_access_control_configure_submit_del_roles(&$form_state) {
+
+  $pids = array_filter($form_state["values"]["rules_table"]);
+  $roles = array_filter($form_state["values"]["roles"]);
+
+  if (empty($pids) || empty($roles)) {
+    drupal_set_message("Please select both protected paths and roles.", "error");
+    return;
+  }
+
+  foreach ($pids as $pid) {
+    $rule = stanford_access_control_get_config_array($pid);
+    $data = array(
+      'pid' => $pid,
+      'roles' => array_diff($rule->roles, $roles),
+    );
+    stanford_access_control_update_rule($data, TRUE);
+  }
+
+  // Must rebuild node_access table...
+  stanford_access_control_rebuild_and_clear_caches();
+
+  drupal_set_message("The protected paths have been modified.");
 
 }
 
@@ -143,6 +204,11 @@ function stanford_access_control_configure_submit_modify(&$form_state) {
 function stanford_access_control_configure_submit_enable(&$form_state) {
   $values = $form_state["values"];
   $pids = array_filter($values["rules_table"]);
+
+  if (!count($pids)) {
+    drupal_set_message("No items were selected.", "error");
+    return;
+  }
 
   $orq = db_or();
   foreach ($pids as $pid) {
@@ -171,6 +237,11 @@ function stanford_access_control_configure_submit_enable(&$form_state) {
 function stanford_access_control_configure_submit_disable(&$form_state) {
   $values = $form_state["values"];
   $pids = array_filter($values["rules_table"]);
+
+  if (!count($pids)) {
+    drupal_set_message("No items were selected.", "error");
+    return;
+  }
 
   $orq = db_or();
   foreach ($pids as $pid) {
@@ -201,6 +272,7 @@ function stanford_access_control_configure_submit_delete($pids) {
 
   // Need at least one item.
   if (empty($clean)) {
+    drupal_set_message("No items were selected.", "error");
     return;
   }
 
@@ -412,7 +484,6 @@ function stanford_access_control_get_rule_form(&$form, &$form_state) {
     '#type' => 'submit',
     '#value' => t('Save'),
   );
-
 
 }
 
