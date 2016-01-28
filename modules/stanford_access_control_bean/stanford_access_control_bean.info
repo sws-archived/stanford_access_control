@@ -1,0 +1,9 @@
+name = Stanford Access Control BEAN
+description = This module provides a UI for working with Stanford Access Control and BEANs.
+core = 7.x
+package = Stanford
+version = 7.x-1.0-dev
+project = stanford_accees_control_bean
+dependencies[] = bean
+; stylesheets[all][] = css/stanford_module.css
+; scripts[] = js/stanford_module.js
