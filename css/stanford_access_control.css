@@ -22,3 +22,7 @@
 .alert.alert-block.stanford-access-control a.close:focus {
   font-weight: 600;
 }
+
+.page-admin-config-stanford .form-item-operations {
+  display: inline;
+}
