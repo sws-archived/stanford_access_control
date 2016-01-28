@@ -108,7 +108,7 @@ function stanford_access_control_bean_form_alter_validate($form, &$form_state) {
  */
 function stanford_access_control_bean_entity_insert($entity) {
 
-  if ($entity->entityType() !== "bean") {
+  if (is_a($entity, "stdClass") || $entity->entityType() !== "bean") {
     return;
   }
 
@@ -134,7 +134,7 @@ function stanford_access_control_bean_entity_insert($entity) {
  */
 function stanford_access_control_bean_entity_update($entity) {
 
-  if ($entity->entityType() !== "bean") {
+  if (is_a($entity, "stdClass") || $entity->entityType() !== "bean") {
     return;
   }
 
@@ -178,7 +178,7 @@ function stanford_access_control_bean_entity_update($entity) {
  */
 function stanford_access_control_bean_entity_delete($entity) {
 
-  if ($entity->entityType() !== "bean") {
+  if (is_a($entity, "stdClass") || $entity->entityType() !== "bean") {
     return;
   }
 
