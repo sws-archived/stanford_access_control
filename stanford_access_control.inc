@@ -129,6 +129,7 @@ function stanford_access_control_get_config_array($pid = NULL) {
  */
 function stanford_access_control_deny_access() {
   drupal_access_denied();
+  // Do other stuff.
   exit();
 }
 
@@ -136,10 +137,13 @@ function stanford_access_control_deny_access() {
  * Delete a rule by pid.
  * @param int $pid
  *   The pid key to delete from the database
+ * @param  bool $skip
+ *   Skip the cache clears. Useful when doing many transactions.
+ *
  * @return bool
  *   True if db_delete worked. False otherwise.
  */
-function stanford_access_control_delete_rule($pid) {
+function stanford_access_control_delete_rule($pid, $skip = FALSE) {
 
   if (!is_numeric($pid)) {
     throw new Exception("PID must be numeric");
@@ -150,14 +154,10 @@ function stanford_access_control_delete_rule($pid) {
     ->condition('pid', $pid)
     ->execute();
 
-  // Must rebuild node_access table...
-  // node_access_needs_rebuild(TRUE);
-  node_access_rebuild(TRUE);
-  menu_rebuild();
-  if (module_exists("views")) {
-    views_invalidate_cache();
+  if (!$skip) {
+    // Must rebuild node_access table...
+    stanford_access_control_rebuild_and_clear_caches();
   }
-  drupal_flush_all_caches();
 
   return $status;
 }
@@ -196,13 +196,7 @@ function stanford_access_control_create_rule($data) {
   $status = drupal_write_record("stanford_access_control", $data);
 
   // Must rebuild node_access table...
-  // node_access_needs_rebuild(TRUE);
-  node_access_rebuild(TRUE);
-  menu_rebuild();
-  if (module_exists("views")) {
-    views_invalidate_cache();
-  }
-  drupal_flush_all_caches();
+  stanford_access_control_rebuild_and_clear_caches();
 
   return $status;
 }
@@ -215,26 +209,26 @@ function stanford_access_control_create_rule($data) {
  * @param array $data
  *   An array of keyed data to pass to drupal_write_record.
  *
+ * @param  bool $skip
+ *   Skip the cache clears. Useful when doing multiple transactions.
+ *
  * @return bool
  *   success or not.
  */
-function stanford_access_control_update_rule($data) {
+function stanford_access_control_update_rule($data, $skip = FALSE) {
 
   global $user;
   $keys = array("pid");
   $defaults = array(
-    'path' => NULL,
-    'title' => "Missing Title",
-    'users' => array(),
-    'roles' => $user->roles,
+    // 'path' => NULL,
+    // 'title' => "Missing Title",
+    // 'users' => array(),
+    // 'roles' => $user->roles,
     'editor' => $user->uid,
     'changed' => time(),
     'pid' => NULL,
   );
   $data = array_merge($defaults, $data);
-
-  // Filter out disabled roles.
-  $data["roles"] = array_filter($data["roles"]);
 
   // don't want to change some things.
   unset($data["created"]);
@@ -242,7 +236,20 @@ function stanford_access_control_update_rule($data) {
 
   $status = drupal_write_record("stanford_access_control", $data, $keys);
 
-  // Must rebuild node_access table...
+  if (!$skip) {
+    // Must rebuild node_access table...
+    stanford_access_control_rebuild_and_clear_caches();
+  }
+
+  return $status;
+
+}
+
+/**
+ * When something changes we need to do some heavy lifting to get it to appear
+ * right away.
+ */
+function stanford_access_control_rebuild_and_clear_caches() {
   // node_access_needs_rebuild(TRUE);
   node_access_rebuild(TRUE);
   menu_rebuild();
@@ -250,7 +257,4 @@ function stanford_access_control_update_rule($data) {
     views_invalidate_cache();
   }
   drupal_flush_all_caches();
-
-  return $status;
-
 }

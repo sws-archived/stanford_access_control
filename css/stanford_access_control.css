@@ -1,0 +1,30 @@
+/* Stanford Access Control Styles */
+
+.alert.alert-block.stanford-access-control {
+  border: none;
+  background-color: #00A3CC;
+  border-bottom: 5px solid #00596F;
+  color: #fbfbf9;
+  text-shadow: none;
+}
+
+.alert.alert-block.stanford-access-control a {
+  color: #E9E6DE;
+}
+
+.alert.alert-block.stanford-access-control a:hover,
+.alert.alert-block a:focus {
+  color: #fbfbf9;
+}
+
+.alert.alert-block.stanford-access-control a.close {
+  color: #00596F;
+  text-shadow: none;
+  opacity: 0.75;
+  font-weight: 300;
+}
+
+.alert.alert-block.stanford-access-control a.close:hover,
+.alert.alert-block.stanford-access-control a.close:focus {
+  color: #fbfbf9;
+}
