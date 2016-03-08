@@ -509,7 +509,8 @@ function stanford_access_control_rule_validate($form, &$form_state) {
   $patterns = array(
     '/(\r\n?|\n)/', // newlines
     '/\*/', // asterisks
-    '/(^|\|)\<front\>($|\|)/' // <front>
+    '/(^|\|)\<front\>($|\|)/', // <front>
+    '/^~/', // negate path
   );
 
   // Check for pattern first.
