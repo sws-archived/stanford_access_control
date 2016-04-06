@@ -192,13 +192,9 @@ function stanford_access_control_bean_entity_delete($entity) {
 }
 
 /**
- * [stanford_access_control_bean_entity_view description]
- * @param  [type] $entity [description]
- * @return [type]         [description]
+ * Implements hook_entity_view()
  */
 function stanford_access_control_bean_entity_view($entity, $type, $view_mode, $langcode) {
-  // dpm($entities);
-  // dpm($entity_type);
 
   if ($type !== "bean") {
     return;
