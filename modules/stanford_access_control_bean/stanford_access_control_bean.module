@@ -190,3 +190,80 @@ function stanford_access_control_bean_entity_delete($entity) {
     drupal_set_message("Removed protection rule: " . $rule->title, "status");
   }
 }
+
+/**
+ * Implements hook_entity_view()
+ */
+function stanford_access_control_bean_entity_view($entity, $type, $view_mode, $langcode) {
+
+  if ($type !== "bean") {
+    return;
+  }
+
+  // Check the setting to see if this was disabled.
+  $on = variable_get("stanford_access_control_messages", TRUE);
+  if (!$on) {
+    return;
+  }
+
+  $normal_path = drupal_get_normal_path("block/" . $entity->delta);
+  $pids = stanford_access_control_get_pids_by_path($normal_path);
+  $message = "The block below this message is protected by the !title protection rule and permits the following role(s) to view: @allowed";
+
+  // Nothing to do with no results.
+  if (!is_array($pids)) {
+    return;
+  }
+
+  foreach ($pids as $pid => $obj) {
+
+    $link_to_rule = l(
+      check_plain($obj->title),
+      "admin/config/stanford/access-control/" . $pid . "/edit"
+    );
+
+    $allowed = "";
+    if (is_array($obj->roles)) {
+      $obj->roles = array_filter($obj->roles);
+      $pop = 0;
+
+      if (count($obj->roles) >= 2) {
+        $pop = array_pop($obj->roles);
+      }
+
+      $allowed = implode(", ", $obj->roles);
+
+      if (!empty($pop)) {
+        $allowed .= t(", and ") . $pop;
+      }
+
+      // For John.
+      $allowed .= ".";
+
+    }
+
+    if (is_array($obj->users) && !empty($obj->users)) {
+      $allowed .= " " . t("and") . " " . implode(", ", $obj->users);
+    }
+
+    // Only show the message if our user can do something about it.
+    if (user_access("administer stanford access control")) {
+
+      $message = t($message,
+        array(
+          "!title" => $link_to_rule,
+          "@allowed" => $allowed
+        )
+      );
+
+      $entity->content["sacb_banner"]["#weight"] = -100;
+  $entity->content["sacb_banner"]["#markup"] = '<div class="alert alert-block stanford-access-control">
+  <a class="close" data-dismiss="alert" href="#">x</a>
+  ' . $message . '
+  </div>';
+
+
+    }
+  }
+
+}
