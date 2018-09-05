@@ -289,7 +289,7 @@ function stanford_access_control_configure_submit_delete($pids) {
     $data = array();
     $data["admin_title"] = $rule->title;
     $data["pid"] = $pid;
-    stanford_access_control_log_event("delete", $data);
+    // stanford_access_control_log_event("delete", $data);
   }
 
   // Something changed. Clear clear clear!
@@ -709,7 +709,7 @@ function stanford_access_control_delete_confirm_submit($form, &$form_state) {
   drupal_set_message(t('The path has been successfully deleted from the protected pages.'));
 
   // Log it.
-  stanford_access_control_log_event("delete", array("admin_title" => $values["admin_title"]));
+  // stanford_access_control_log_event("delete", array("admin_title" => $values["admin_title"]));
 
   // Got to go somewhere...
   $form_state['redirect'] = 'admin/config/stanford/access-control';
@@ -748,5 +748,3 @@ function stanford_access_control_settings_submit($form, &$form_state) {
   }
 
 }
-
-

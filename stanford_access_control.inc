@@ -145,9 +145,24 @@ function stanford_access_control_deny_access() {
  */
 function stanford_access_control_delete_rule($pid, $skip = FALSE) {
 
+  global $user;
+
   if (!is_numeric($pid)) {
     throw new Exception("PID must be numeric");
   }
+
+  $info = stanford_access_control_get_config_array($pid);
+
+  watchdog(
+    'stanford_access_control',
+    '%user has deleted rule #%rid %title',
+    array(
+      "%user" => $user->name,
+      "%rid" => $pid,
+      "%title" => $info->title,
+    ),
+    WATCHDOG_NOTICE
+  );
 
   // Do the delete.
   $status = db_delete('stanford_access_control')
