@@ -166,7 +166,7 @@ function stanford_access_control_node_access($node, $op, $account) {
 function stanford_access_control_node_grants($account, $op) {
   $grants = array();
   if ($op == "view") {
-    $grants["stanford_access_control"] = array($account->uid);
+    $grants["stanford_access_control"] = array_keys($account->roles);
   }
   return $grants;
 }
@@ -176,36 +176,80 @@ function stanford_access_control_node_grants($account, $op) {
  */
 function stanford_access_control_node_access_records($node) {
 
+  // This is where we generate the grant records for every node in the site.
+  // We do this by role.
+  // Each role will have the ability to create a grant.
+
   $grants = array();
-  $path = "node/" . $node->nid;
+  $path = drupal_get_normal_path("node/" . $node->nid);
   $record = array(
     'nid' => $node->nid,
     'gid' => 0,
-    'realm' => 'all',
+    'realm' => 'stanford_access_control',
     'priority' => 1,
     'grant_view' => 1,
     'grant_update' => 0,
     'grant_delete' => 0,
   );
 
-  $users = entity_load('user');
+  // Do the normal parsing of the path.
+  $alias = "";
+  if (module_exists("path")) {
+    $alias = drupal_get_path_alias($path);
+  }
 
-  foreach ($users as $account) {
-    // If in the locked paths. Add a grant.
-    $access = stanford_access_control_check_user_access($path, $account);
+  // Get all the pids that match the path we are on.
+  $pids = stanford_access_control_get_pids_by_path($path, $alias);
 
-    if (!$access) {
-      continue;
+  // Available user roles.
+  $roles = user_roles();
+
+  // If no pids then we can assume access.
+  if (!$pids) {
+    $grants[] = array(
+      'nid' => $node->nid,
+      'gid' => 0,
+      'realm' => 'all',
+      'priority' => 1,
+      'grant_view' => 1,
+      'grant_update' => 0,
+      'grant_delete' => 0,
+    );
+  }
+
+  // Loop through each role checking the rules to assign grants or denys.
+  // Deny is implict and does not need to be written to the db.
+  foreach ($roles as $role_id => $role_name) {
+
+    // Grant ID will be assigned to the role id.
+    $record['gid'] = $role_id;
+
+    // If there are access rules in the db loop through them and check wether
+    // any of them deny the current role.
+    if (!empty($pids)) {
+      foreach ($pids as $values) {
+
+        // If the rule is not enabled then skip.
+        if (!$values->enabled) {
+          continue;
+        }
+
+        // Get the allowed roles and format for use in an in_array.
+        // The array will have 0 as the value for a not-in-use role and it will
+        // need to be removed before we can use it in the in_array function.
+        $rule_roles = array_unique(array_values($values->roles));
+        $rule_roles = array_filter($rule_roles, 'is_string');
+
+        // If there are no roles in the rule that match we deny by not writing
+        // a record to the DB.
+        if (!in_array($role_name, $rule_roles)) {
+          continue;
+        }
+
+        // There must have been a match. Write the rule by adding it to return.
+        $grants[$node->nid . "-sac-" . $role_id] = $record;
+      }
     }
-
-    // Don't mess with unpublished/published workflows.
-    if ((int) $node->status === 0 && !user_access("view own unpublished content", $account)) {
-      continue;
-    }
-
-    $record['gid'] = $account->uid;
-    $record['realm'] = "stanford_access_control";
-    $grants[] = $record;
   }
 
   return $grants;
@@ -305,15 +349,8 @@ function stanford_access_control_check_user_access($path = NUll, $user = NULL) {
       continue;
     }
 
-    // Get the allowed users and roles.
+    // Get the allowed roles.
     $roles = $values->roles;
-    $users = $values->users;
-
-    // Check if the user has specific access.
-    if (in_array($user->uid, $users)) {
-      $access = TRUE;
-      break;
-    }
 
     // Check if any of the roles match.
     if (is_array($roles)) {
